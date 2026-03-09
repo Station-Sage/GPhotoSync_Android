@@ -1,33 +1,33 @@
 package com.gphotosync
 
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.widget.EditText
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.browser.customtabs.CustomTabsIntent
 import com.gphotosync.databinding.ActivityOauthBinding
 import okhttp3.*
 import org.json.JSONObject
 import java.io.IOException
 import java.net.URLEncoder
-import java.net.ServerSocket
-import kotlin.concurrent.thread
 
 class OAuthActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityOauthBinding
     private val httpClient = OkHttpClient()
-    private var serverSocket: ServerSocket? = null
 
     companion object {
         const val EXTRA_TYPE = "oauth_type"
         const val GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
         const val MS_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+        private const val REDIRECT_URI = "http://localhost"
     }
 
     private var oauthType: String = "google"
-    private var redirectUri: String = ""
     private var codeHandled = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -38,88 +38,19 @@ class OAuthActivity : AppCompatActivity() {
         oauthType = intent.getStringExtra(EXTRA_TYPE) ?: "google"
         codeHandled = false
 
-        // intent-filter로 돌아온 경우 (gphotosync://oauth?code=...)
-        intent.data?.let { uri ->
-            val code = uri.getQueryParameter("code")
-            if (!code.isNullOrEmpty()) {
-                redirectUri = "gphotosync://oauth/callback"
-                handleCode(code)
-                return
-            }
+        // 브라우저에서 인증 페이지 열기
+        val authUrl = buildAuthUrl(oauthType)
+        try {
+            val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
+            startActivity(browserIntent)
+        } catch (e: Exception) {
+            Toast.makeText(this, "브라우저를 열 수 없습니다", Toast.LENGTH_LONG).show()
+            finish()
+            return
         }
 
-        startLoopbackOAuth()
-    }
-
-    override fun onNewIntent(intent: Intent?) {
-        super.onNewIntent(intent)
-        intent?.data?.let { uri ->
-            val code = uri.getQueryParameter("code")
-            if (!code.isNullOrEmpty() && !codeHandled) {
-                redirectUri = "gphotosync://oauth/callback"
-                handleCode(code)
-            }
-        }
-    }
-
-    private fun startLoopbackOAuth() {
-        binding.progressLayout.visibility = android.view.View.VISIBLE
-        binding.webView.visibility = android.view.View.GONE
-
-        thread {
-            try {
-                serverSocket = ServerSocket(0) // 랜덤 포트
-                val port = serverSocket!!.localPort
-                redirectUri = "http://127.0.0.1:$port"
-
-                runOnUiThread {
-                    val authUrl = buildAuthUrl(oauthType)
-                    try {
-                        val customTabsIntent = CustomTabsIntent.Builder().build()
-                        customTabsIntent.launchUrl(this, Uri.parse(authUrl))
-                    } catch (e: Exception) {
-                        // Custom Tab 실패시 일반 브라우저
-                        val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
-                        startActivity(browserIntent)
-                    }
-                }
-
-                // 로컬 서버에서 콜백 대기
-                val socket = serverSocket!!.accept()
-                val reader = socket.getInputStream().bufferedReader()
-                val requestLine = reader.readLine() ?: ""
-
-                // GET /?code=xxx&scope=... HTTP/1.1
-                val path = requestLine.split(" ").getOrNull(1) ?: ""
-                val uri = Uri.parse("http://localhost$path")
-                val code = uri.getQueryParameter("code")
-
-                // 브라우저에 완료 페이지 표시
-                val response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n" +
-                    "<html><body style='text-align:center;padding:50px;font-family:sans-serif;'>" +
-                    "<h2>✅ 인증 완료!</h2><p>앱으로 돌아가세요.</p>" +
-                    "<script>window.close();</script></body></html>"
-                socket.getOutputStream().write(response.toByteArray())
-                socket.close()
-                serverSocket?.close()
-
-                if (!code.isNullOrEmpty()) {
-                    runOnUiThread { handleCode(code) }
-                } else {
-                    runOnUiThread {
-                        Toast.makeText(this, "인증 실패: 코드 없음", Toast.LENGTH_LONG).show()
-                        setResult(RESULT_CANCELED)
-                        finish()
-                    }
-                }
-            } catch (e: Exception) {
-                runOnUiThread {
-                    Toast.makeText(this, "서버 오류: ${e.message}", Toast.LENGTH_LONG).show()
-                    setResult(RESULT_CANCELED)
-                    finish()
-                }
-            }
-        }
+        // 코드 입력 다이얼로그 표시
+        showCodeInputDialog()
     }
 
     private fun buildAuthUrl(type: String): String {
@@ -127,12 +58,12 @@ class OAuthActivity : AppCompatActivity() {
             "google" -> {
                 val clientId = TokenManager.get(TokenManager.KEY_G_CLIENT_ID) ?: ""
                 val params = mapOf(
-                    "client_id"     to clientId,
-                    "redirect_uri"  to redirectUri,
+                    "client_id" to clientId,
+                    "redirect_uri" to REDIRECT_URI,
                     "response_type" to "code",
-                    "scope"         to "https://www.googleapis.com/auth/photoslibrary.readonly",
-                    "access_type"   to "offline",
-                    "prompt"        to "consent"
+                    "scope" to "https://www.googleapis.com/auth/photoslibrary.readonly",
+                    "access_type" to "offline",
+                    "prompt" to "consent"
                 )
                 "https://accounts.google.com/o/oauth2/v2/auth?" + params.entries
                     .joinToString("&") { "${it.key}=${URLEncoder.encode(it.value, "UTF-8")}" }
@@ -140,10 +71,10 @@ class OAuthActivity : AppCompatActivity() {
             "microsoft" -> {
                 val clientId = TokenManager.get(TokenManager.KEY_MS_CLIENT_ID) ?: ""
                 val params = mapOf(
-                    "client_id"     to clientId,
+                    "client_id" to clientId,
                     "response_type" to "code",
-                    "redirect_uri"  to redirectUri,
-                    "scope"         to "Files.ReadWrite offline_access",
+                    "redirect_uri" to REDIRECT_URI,
+                    "scope" to "Files.ReadWrite offline_access",
                     "response_mode" to "query"
                 )
                 "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?" + params.entries
@@ -153,35 +84,86 @@ class OAuthActivity : AppCompatActivity() {
         }
     }
 
-    private fun handleCode(code: String) {
-        if (codeHandled) return
-        codeHandled = true
+    private fun showCodeInputDialog() {
+        val editText = EditText(this).apply {
+            hint = "브라우저 주소창의 code= 값을 붙여넣으세요"
+            setPadding(48, 32, 48, 32)
+        }
 
-        binding.webView.visibility = android.view.View.GONE
-        binding.progressLayout.visibility = android.view.View.VISIBLE
+        AlertDialog.Builder(this)
+            .setTitle("인증 코드 입력")
+            .setMessage("브라우저에서 Google 로그인 후,\n주소창이 http://localhost/?code=XXXX 로 바뀝니다.\n\n" +
+                "1. 주소창의 전체 URL을 복사하거나\n" +
+                "2. code= 뒤의 값만 복사해서 붙여넣으세요.\n\n" +
+                "(페이지가 로드 안 되는 게 정상입니다)")
+            .setView(editText)
+            .setCancelable(false)
+            .setPositiveButton("확인") { _, _ ->
+                val input = editText.text.toString().trim()
+                val code = extractCode(input)
+                if (code.isNotEmpty()) {
+                    exchangeCodeForToken(code)
+                } else {
+                    Toast.makeText(this, "유효한 코드가 없습니다", Toast.LENGTH_LONG).show()
+                    setResult(RESULT_CANCELED)
+                    finish()
+                }
+            }
+            .setNeutralButton("클립보드에서 붙여넣기") { _, _ ->
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = clipboard.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
+                val code = extractCode(clip)
+                if (code.isNotEmpty()) {
+                    exchangeCodeForToken(code)
+                } else {
+                    Toast.makeText(this, "클립보드에 유효한 코드가 없습니다", Toast.LENGTH_LONG).show()
+                    setResult(RESULT_CANCELED)
+                    finish()
+                }
+            }
+            .setNegativeButton("취소") { _, _ ->
+                setResult(RESULT_CANCELED)
+                finish()
+            }
+            .show()
+    }
 
-        exchangeCodeForToken(code)
+    private fun extractCode(input: String): String {
+        // URL 형태: http://localhost/?code=4/0XXXX&scope=...
+        if (input.contains("code=")) {
+            val uri = Uri.parse(input)
+            val code = uri.getQueryParameter("code")
+            if (!code.isNullOrEmpty()) return code
+            // 수동 파싱
+            val start = input.indexOf("code=") + 5
+            val end = input.indexOf("&", start).let { if (it == -1) input.length else it }
+            return input.substring(start, end)
+        }
+        // 코드 직접 입력
+        return input
     }
 
     private fun exchangeCodeForToken(code: String) {
+        if (codeHandled) return
+        codeHandled = true
+
+        Toast.makeText(this, "토큰 교환 중...", Toast.LENGTH_SHORT).show()
+
         val formBuilder = FormBody.Builder()
             .add("code", code)
-            .add("redirect_uri", redirectUri)
+            .add("redirect_uri", REDIRECT_URI)
             .add("grant_type", "authorization_code")
 
         val tokenUrl: String
         when (oauthType) {
             "google" -> {
                 tokenUrl = GOOGLE_TOKEN_URL
-                val clientId     = TokenManager.get(TokenManager.KEY_G_CLIENT_ID) ?: ""
-                val clientSecret = TokenManager.get(TokenManager.KEY_G_CLIENT_SECRET) ?: ""
-                formBuilder.add("client_id", clientId)
-                formBuilder.add("client_secret", clientSecret)
+                formBuilder.add("client_id", TokenManager.get(TokenManager.KEY_G_CLIENT_ID) ?: "")
+                formBuilder.add("client_secret", TokenManager.get(TokenManager.KEY_G_CLIENT_SECRET) ?: "")
             }
             "microsoft" -> {
                 tokenUrl = MS_TOKEN_URL
-                val clientId = TokenManager.get(TokenManager.KEY_MS_CLIENT_ID) ?: ""
-                formBuilder.add("client_id", clientId)
+                formBuilder.add("client_id", TokenManager.get(TokenManager.KEY_MS_CLIENT_ID) ?: "")
                 formBuilder.add("scope", "Files.ReadWrite offline_access")
             }
             else -> return
@@ -205,11 +187,12 @@ class OAuthActivity : AppCompatActivity() {
                 runOnUiThread {
                     if (json.has("access_token")) {
                         saveTokens(json)
-                        Toast.makeText(this@OAuthActivity, "인증 완료!", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(this@OAuthActivity, "인증 성공!", Toast.LENGTH_SHORT).show()
                         setResult(RESULT_OK)
                         finish()
                     } else {
-                        Toast.makeText(this@OAuthActivity, "토큰 오류: $body", Toast.LENGTH_LONG).show()
+                        val error = json.optString("error_description", json.optString("error", body))
+                        Toast.makeText(this@OAuthActivity, "토큰 오류: $error", Toast.LENGTH_LONG).show()
                         setResult(RESULT_CANCELED)
                         finish()
                     }
@@ -219,10 +202,10 @@ class OAuthActivity : AppCompatActivity() {
     }
 
     private fun saveTokens(json: JSONObject) {
-        val access    = json.getString("access_token")
-        val refresh   = json.optString("refresh_token", "")
+        val access = json.getString("access_token")
+        val refresh = json.optString("refresh_token", "")
         val expiresIn = json.optLong("expires_in", 3600)
-        val expiry    = System.currentTimeMillis() / 1000 + expiresIn
+        val expiry = System.currentTimeMillis() / 1000 + expiresIn
 
         when (oauthType) {
             "google" -> {
@@ -236,10 +219,5 @@ class OAuthActivity : AppCompatActivity() {
                 TokenManager.saveLong(TokenManager.KEY_MS_EXPIRY, expiry)
             }
         }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        try { serverSocket?.close() } catch (_: Exception) {}
     }
 }
