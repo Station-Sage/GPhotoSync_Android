@@ -1,9 +1,0 @@
-/data/data/com.termux/files/home/GphotoSync/app/src/main/java/com/gphotosync/SyncForegroundService.kt
-/data/data/com.termux/files/home/GphotoSync/app/src/main/java/com/gphotosync/GooglePhotosApi.kt
-/data/data/com.termux/files/home/GphotoSync/app/src/main/java/com/gphotosync/OneDriveApi.kt
-/data/data/com.termux/files/home/GphotoSync/app/src/main/java/com/gphotosync/OAuthCallbackActivity.kt
-/data/data/com.termux/files/home/GphotoSync/app/src/main/java/com/gphotosync/MainActivity.kt
-/data/data/com.termux/files/home/GphotoSync/app/src/main/java/com/gphotosync/OAuthActivity.kt
-/data/data/com.termux/files/home/GphotoSync/app/src/main/java/com/gphotosync/SyncProgressStore.kt
-/data/data/com.termux/files/home/GphotoSync/app/src/main/java/com/gphotosync/GPhotoSyncApp.kt
-/data/data/com.termux/files/home/GphotoSync/app/src/main/java/com/gphotosync/TokenManager.kt
