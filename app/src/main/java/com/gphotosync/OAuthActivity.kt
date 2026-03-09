@@ -178,6 +178,7 @@ class OAuthActivity : AppCompatActivity() {
                 tokenUrl = MS_TOKEN_URL
                 formBuilder.add("client_id", TokenManager.get(TokenManager.KEY_MS_CLIENT_ID) ?: "")
                 formBuilder.add("code_verifier", codeVerifier)
+                formBuilder.add("client_secret", "qtyfaBBYA403=unZUP40~_#")
                 formBuilder.add("scope", "Files.ReadWrite offline_access")
             }
             else -> return
