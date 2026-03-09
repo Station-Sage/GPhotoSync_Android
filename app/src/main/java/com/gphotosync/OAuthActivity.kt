@@ -1,6 +1,5 @@
 package com.gphotosync
 
-import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.webkit.WebResourceRequest
@@ -10,31 +9,25 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.gphotosync.databinding.ActivityOauthBinding
 import okhttp3.*
-import okhttp3.FormBody
 import org.json.JSONObject
 import java.io.IOException
 import java.net.URLEncoder
 
-/**
- * OAuth 인증 화면 (구글 / 마이크로소프트)
- * WebView로 인앱 처리 → 앱 이탈 없음
- */
 class OAuthActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityOauthBinding
     private val client = OkHttpClient()
 
     companion object {
-        const val EXTRA_TYPE = "oauth_type"     // "google" or "microsoft"
-        const val REDIRECT_SCHEME = "gphotosync"
-        const val REDIRECT_HOST   = "oauth"
-        val REDIRECT_URI = "$REDIRECT_SCHEME://$REDIRECT_HOST/callback"
-
+        const val EXTRA_TYPE = "oauth_type"
+        const val GOOGLE_REDIRECT_URI = "http://localhost"
+        const val MS_REDIRECT_URI = "http://localhost"
         const val GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
         const val MS_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
     }
 
     private var oauthType: String = "google"
+    private var codeHandled = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -42,9 +35,18 @@ class OAuthActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         oauthType = intent.getStringExtra(EXTRA_TYPE) ?: "google"
+        codeHandled = false
 
         val authUrl = buildAuthUrl(oauthType)
         setupWebView(authUrl)
+    }
+
+    private fun getRedirectUri(): String {
+        return when (oauthType) {
+            "google" -> GOOGLE_REDIRECT_URI
+            "microsoft" -> MS_REDIRECT_URI
+            else -> GOOGLE_REDIRECT_URI
+        }
     }
 
     private fun buildAuthUrl(type: String): String {
@@ -53,7 +55,7 @@ class OAuthActivity : AppCompatActivity() {
                 val clientId = TokenManager.get(TokenManager.KEY_G_CLIENT_ID) ?: ""
                 val params = mapOf(
                     "client_id"     to clientId,
-                    "redirect_uri"  to REDIRECT_URI,
+                    "redirect_uri"  to getRedirectUri(),
                     "response_type" to "code",
                     "scope"         to "https://www.googleapis.com/auth/photoslibrary.readonly",
                     "access_type"   to "offline",
@@ -67,7 +69,7 @@ class OAuthActivity : AppCompatActivity() {
                 val params = mapOf(
                     "client_id"     to clientId,
                     "response_type" to "code",
-                    "redirect_uri"  to REDIRECT_URI,
+                    "redirect_uri"  to getRedirectUri(),
                     "scope"         to "Files.ReadWrite offline_access",
                     "response_mode" to "query"
                 )
@@ -85,14 +87,14 @@ class OAuthActivity : AppCompatActivity() {
             webViewClient = object : WebViewClient() {
                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                     val url = request.url.toString()
-                    if (url.startsWith("$REDIRECT_SCHEME://")) {
+                    if (url.startsWith("http://localhost") && url.contains("code=")) {
                         handleCallback(Uri.parse(url))
                         return true
                     }
                     return false
                 }
                 override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
-                    if (url?.startsWith("$REDIRECT_SCHEME://") == true) {
+                    if (url != null && url.startsWith("http://localhost") && url.contains("code=")) {
                         handleCallback(Uri.parse(url))
                     }
                 }
@@ -102,6 +104,9 @@ class OAuthActivity : AppCompatActivity() {
     }
 
     private fun handleCallback(uri: Uri) {
+        if (codeHandled) return
+        codeHandled = true
+
         val code = uri.getQueryParameter("code")
         if (code.isNullOrEmpty()) {
             Toast.makeText(this, "인증 실패: 코드 없음", Toast.LENGTH_LONG).show()
@@ -119,7 +124,7 @@ class OAuthActivity : AppCompatActivity() {
     private fun exchangeCodeForToken(code: String) {
         val formBuilder = FormBody.Builder()
             .add("code", code)
-            .add("redirect_uri", REDIRECT_URI)
+            .add("redirect_uri", getRedirectUri())
             .add("grant_type", "authorization_code")
 
         val tokenUrl: String
