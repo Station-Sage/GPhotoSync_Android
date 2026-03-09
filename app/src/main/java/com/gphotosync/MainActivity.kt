@@ -1,51 +1,58 @@
 package com.gphotosync
 
 import android.app.Activity
-import android.app.DatePickerDialog
-import android.view.View
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.LayoutInflater
+import android.view.View
 import android.widget.EditText
 import android.widget.LinearLayout
+import android.widget.RadioButton
+import android.widget.RadioGroup
+import android.widget.ScrollView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import com.gphotosync.databinding.ActivityMainBinding
+import androidx.appcompat.app.AppCompatDelegate
+import com.google.android.material.tabs.TabLayout
 import org.json.JSONObject
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var binding: ActivityMainBinding
     private lateinit var progressDb: SyncProgressStore
     private var isSyncing = false
-    private var dateFrom: Long? = null
-    private var dateTo: Long? = null
-
     private val handler = Handler(Looper.getMainLooper())
-    private var logRefreshRunnable: Runnable? = null
+    private var liveLogLines = mutableListOf<String>()
+
+    // Tab views
+    private var syncView: View? = null
+    private var authView: View? = null
+    private var infoView: View? = null
 
     private val googleAuthLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
+            Toast.makeText(this, "Google 인증 성공!", Toast.LENGTH_SHORT).show()
         }
-        updateUI()
+        updateAuthUI()
     }
 
     private val msAuthLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
+            Toast.makeText(this, "Microsoft 인증 성공!", Toast.LENGTH_SHORT).show()
         }
-        updateUI()
+        updateAuthUI()
     }
 
     private val jsonFilePicker = registerForActivityResult(
@@ -57,15 +64,11 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         TokenManager.init(this)
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-
+        applySavedTheme()
+        setContentView(R.layout.activity_main)
         progressDb = SyncProgressStore(this)
 
-        setupButtons()
-        updateUI()
-        setupDetailTabs()
-        loadHistorySummary()
+        setupTabs()
 
         SyncForegroundService.progressCallback = { progress ->
             runOnUiThread { updateProgress(progress) }
@@ -75,174 +78,112 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun setupButtons() {
-        binding.btnGoogleSetup.setOnClickListener { showGoogleSetupDialog() }
-        binding.btnGoogleAuth.setOnClickListener {
-            if (TokenManager.get(TokenManager.KEY_G_CLIENT_ID).isNullOrEmpty()) {
-                Toast.makeText(this, "먼저 API 설정을 하세요", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
-            }
-            val intent = Intent(this, OAuthActivity::class.java)
-            intent.putExtra(OAuthActivity.EXTRA_TYPE, "google")
-            googleAuthLauncher.launch(intent)
+    private fun applySavedTheme() {
+        val prefs = getSharedPreferences("app_settings", MODE_PRIVATE)
+        when (prefs.getInt("theme", 0)) {
+            0 -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
+            1 -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
+            2 -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
         }
+    }
 
-        binding.btnMsSetup.setOnClickListener { showMsSetupDialog() }
-        binding.btnMsAuth.setOnClickListener {
-            if (TokenManager.get(TokenManager.KEY_MS_CLIENT_ID).isNullOrEmpty()) {
-                Toast.makeText(this, "먼저 API 설정을 하세요", Toast.LENGTH_SHORT).show()
-                return@setOnClickListener
+    private fun setupTabs() {
+        val tabLayout = findViewById<TabLayout>(R.id.tabLayout)
+        val contentFrame = findViewById<android.widget.FrameLayout>(R.id.contentFrame)
+
+        tabLayout.addTab(tabLayout.newTab().setText("동기화"))
+        tabLayout.addTab(tabLayout.newTab().setText("인증"))
+        tabLayout.addTab(tabLayout.newTab().setText("정보"))
+
+        syncView = LayoutInflater.from(this).inflate(R.layout.tab_sync, contentFrame, false)
+        authView = LayoutInflater.from(this).inflate(R.layout.tab_auth, contentFrame, false)
+        infoView = LayoutInflater.from(this).inflate(R.layout.tab_info, contentFrame, false)
+
+        setupSyncTab()
+        setupAuthTab()
+        setupInfoTab()
+
+        contentFrame.addView(syncView)
+
+        tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
+            override fun onTabSelected(tab: TabLayout.Tab) {
+                contentFrame.removeAllViews()
+                when (tab.position) {
+                    0 -> { contentFrame.addView(syncView); loadHistorySummary() }
+                    1 -> { contentFrame.addView(authView); updateAuthUI() }
+                    2 -> contentFrame.addView(infoView)
+                }
             }
-            val intent = Intent(this, OAuthActivity::class.java)
-            intent.putExtra(OAuthActivity.EXTRA_TYPE, "microsoft")
-            msAuthLauncher.launch(intent)
-        }
+            override fun onTabUnselected(tab: TabLayout.Tab) {}
+            override fun onTabReselected(tab: TabLayout.Tab) {}
+        })
+    }
 
-        binding.btnSync.setOnClickListener {
+    // ======== SYNC TAB ========
+    private fun setupSyncTab() {
+        val v = syncView ?: return
+
+        v.findViewById<android.widget.Button>(R.id.btnSync).setOnClickListener {
             if (isSyncing) {
                 val stopIntent = Intent(this, SyncForegroundService::class.java)
                 stopIntent.action = SyncForegroundService.ACTION_STOP
                 startForegroundService(stopIntent)
                 isSyncing = false
-                binding.btnSync.text = "동기화 시작"
-                binding.btnSync.setBackgroundColor(0xFF2E7D32.toInt())
-                stopLogRefresh()
+                v.findViewById<android.widget.Button>(R.id.btnSync).text = "동기화 시작"
+                v.findViewById<android.widget.Button>(R.id.btnSync).setBackgroundColor(0xFF2E7D32.toInt())
             } else {
+                if (!TokenManager.isGoogleAuthed() || !TokenManager.isMicrosoftAuthed()) {
+                    Toast.makeText(this, "먼저 인증 탭에서 로그인하세요", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
                 startSync()
             }
         }
 
-        binding.btnReset.setOnClickListener {
-            AlertDialog.Builder(this)
-                .setTitle("초기화")
-                .setMessage("모든 인증 정보와 동기화 기록을 삭제합니다.")
-                .setPositiveButton("확인") { _, _ ->
-                    TokenManager.clearAll()
-                    progressDb.reset()
-                    updateUI()
-                    Toast.makeText(this, "초기화 완료", Toast.LENGTH_SHORT).show()
-                }
-                .setNegativeButton("취소", null)
-                .show()
+        v.findViewById<android.widget.Button>(R.id.btnRetryFailed).setOnClickListener {
+            retryFailed()
         }
 
-        binding.btnRetryFailed.setOnClickListener { retryFailed() }
-
-        binding.btnShowDetail.setOnClickListener {
-            binding.cardDetails.visibility = View.VISIBLE
+        v.findViewById<android.widget.Button>(R.id.btnShowDetail)?.setOnClickListener {
+            v.findViewById<View>(R.id.cardDetails).visibility = View.VISIBLE
             refreshDetailLists()
         }
 
-        binding.btnHideDetail.setOnClickListener {
-            binding.cardDetails.visibility = View.GONE
+        v.findViewById<android.widget.Button>(R.id.btnHideDetail)?.setOnClickListener {
+            v.findViewById<View>(R.id.cardDetails).visibility = View.GONE
         }
 
-        // Date pickers
-        binding.btnDateFrom.setOnClickListener { showDatePicker(true) }
-        binding.btnDateTo.setOnClickListener { showDatePicker(false) }
-    }
-
-    private fun showDatePicker(isFrom: Boolean) {
-        val cal = Calendar.getInstance()
-
-        DatePickerDialog(this, { _, y, m, d ->
-            val selected = Calendar.getInstance()
-            selected.set(y, m, d, if (isFrom) 0 else 23, if (isFrom) 0 else 59, if (isFrom) 0 else 59)
-            val ts = selected.timeInMillis
-            val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-
-            if (isFrom) {
-                dateFrom = ts
-                binding.btnDateFrom.text = fmt.format(Date(ts))
-            } else {
-                dateTo = ts
-                binding.btnDateTo.text = fmt.format(Date(ts))
-            }
-            updateDateRangeText()
-        }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
-    }
-
-    private fun updateDateRangeText() {
-        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        val from = if (dateFrom != null) fmt.format(Date(dateFrom!!)) else "처음"
-        val to = if (dateTo != null) fmt.format(Date(dateTo!!)) else "현재"
-        binding.tvDateRange.text = "$from ~ $to 기간 동기화"
-    }
-
-    private fun setupDetailTabs() {
-        binding.btnTabSuccess.setOnClickListener {
-            binding.layoutSuccess.visibility = View.VISIBLE
-            binding.layoutFailed.visibility = View.GONE
-            binding.btnTabSuccess.setBackgroundColor(0xFF4CAF50.toInt())
-            binding.btnTabFailed.setBackgroundColor(0xFF9E9E9E.toInt())
+        v.findViewById<android.widget.Button>(R.id.btnTabSuccess)?.setOnClickListener {
+            v.findViewById<View>(R.id.layoutSuccess).visibility = View.VISIBLE
+            v.findViewById<View>(R.id.layoutFailed).visibility = View.GONE
+            v.findViewById<android.widget.Button>(R.id.btnTabSuccess).setBackgroundColor(0xFF4CAF50.toInt())
+            v.findViewById<android.widget.Button>(R.id.btnTabFailed).setBackgroundColor(0xFF9E9E9E.toInt())
             refreshDetailLists()
         }
 
-        binding.btnTabFailed.setOnClickListener {
-            binding.layoutSuccess.visibility = View.GONE
-            binding.layoutFailed.visibility = View.VISIBLE
-            binding.btnTabSuccess.setBackgroundColor(0xFF9E9E9E.toInt())
-            binding.btnTabFailed.setBackgroundColor(0xFFF44336.toInt())
+        v.findViewById<android.widget.Button>(R.id.btnTabFailed)?.setOnClickListener {
+            v.findViewById<View>(R.id.layoutSuccess).visibility = View.GONE
+            v.findViewById<View>(R.id.layoutFailed).visibility = View.VISIBLE
+            v.findViewById<android.widget.Button>(R.id.btnTabSuccess).setBackgroundColor(0xFF9E9E9E.toInt())
+            v.findViewById<android.widget.Button>(R.id.btnTabFailed).setBackgroundColor(0xFFF44336.toInt())
             refreshDetailLists()
         }
-    }
 
-    private fun refreshDetailLists() {
-        val successRecords = progressDb.getSuccessRecords()
-        val failedRecords = progressDb.getFailedRecords()
-        val dateFormat = SimpleDateFormat("MM/dd HH:mm", Locale.getDefault())
-
-        binding.tvSuccessCount.text = "완료: ${successRecords.size}건"
-        if (successRecords.isEmpty()) {
-            binding.tvSuccessList.text = "내역 없음"
-        } else {
-            binding.tvSuccessList.text = successRecords.take(100).joinToString("\n") { r ->
-                val time = dateFormat.format(Date(r.timestamp))
-                val size = if (r.fileSize > 0) formatSize(r.fileSize) else ""
-                "[$time] ${r.filename} $size"
-            }
-        }
-
-        binding.tvFailedCount.text = "실패: ${failedRecords.size}건"
-        if (failedRecords.isEmpty()) {
-            binding.tvFailedList.text = "내역 없음"
-        } else {
-            binding.tvFailedList.text = failedRecords.joinToString("\n") { r ->
-                val time = dateFormat.format(Date(r.timestamp))
-                "[$time] ${r.filename}\n  → ${r.error}"
-            }
-        }
-    }
-
-    private fun formatSize(bytes: Long): String {
-        return when {
-            bytes >= 1024 * 1024 -> String.format("%.1fMB", bytes / 1024.0 / 1024.0)
-            bytes >= 1024 -> String.format("%.0fKB", bytes / 1024.0)
-            else -> "${bytes}B"
-        }
-    }
-
-    private var liveLogLines = mutableListOf<String>()
-
-    private fun appendLiveLog(line: String) {
-        liveLogLines.add(line)
-        if (liveLogLines.size > 5) liveLogLines.removeAt(0)
-        binding.tvLiveLog.text = liveLogLines.joinToString("\n")
+        loadHistorySummary()
+        updateRetryButton()
     }
 
     private fun startSync() {
         isSyncing = true
         liveLogLines.clear()
-        binding.tvLiveLog.text = ""
-        binding.btnSync.text = "동기화 중단"
-        binding.btnSync.setBackgroundColor(0xFFF44336.toInt())
-        binding.progressBar.visibility = View.VISIBLE
-        binding.tvProgressPercent.visibility = View.VISIBLE
-        binding.layoutStats.visibility = View.VISIBLE
-        binding.progressBar.isIndeterminate = true
-
-        SyncForegroundService.syncDateFrom = dateFrom
-        SyncForegroundService.syncDateTo = dateTo
+        val v = syncView ?: return
+        v.findViewById<TextView>(R.id.tvLiveLog).text = ""
+        v.findViewById<android.widget.Button>(R.id.btnSync).text = "동기화 중단"
+        v.findViewById<android.widget.Button>(R.id.btnSync).setBackgroundColor(0xFFF44336.toInt())
+        v.findViewById<android.widget.ProgressBar>(R.id.progressBar).visibility = View.VISIBLE
+        v.findViewById<TextView>(R.id.tvProgressDetail).visibility = View.VISIBLE
+        v.findViewById<View>(R.id.layoutStats).visibility = View.VISIBLE
+        v.findViewById<android.widget.ProgressBar>(R.id.progressBar).isIndeterminate = true
 
         val intent = Intent(this, SyncForegroundService::class.java)
         intent.action = SyncForegroundService.ACTION_START
@@ -258,11 +199,14 @@ class MainActivity : AppCompatActivity() {
 
         isSyncing = true
         liveLogLines.clear()
-        binding.tvLiveLog.text = ""
-        binding.btnSync.text = "동기화 중단"
-        binding.btnSync.setBackgroundColor(0xFFF44336.toInt())
-        binding.progressBar.visibility = View.VISIBLE
-        binding.progressBar.isIndeterminate = true
+        val v = syncView ?: return
+        v.findViewById<TextView>(R.id.tvLiveLog).text = ""
+        v.findViewById<android.widget.Button>(R.id.btnSync).text = "동기화 중단"
+        v.findViewById<android.widget.Button>(R.id.btnSync).setBackgroundColor(0xFFF44336.toInt())
+        v.findViewById<android.widget.ProgressBar>(R.id.progressBar).visibility = View.VISIBLE
+        v.findViewById<android.widget.ProgressBar>(R.id.progressBar).isIndeterminate = true
+        v.findViewById<TextView>(R.id.tvProgressDetail).visibility = View.VISIBLE
+        v.findViewById<View>(R.id.layoutStats).visibility = View.VISIBLE
 
         SyncForegroundService.retryItems = failedRecords
         val intent = Intent(this, SyncForegroundService::class.java)
@@ -270,44 +214,98 @@ class MainActivity : AppCompatActivity() {
         startForegroundService(intent)
     }
 
-    private fun stopLogRefresh() {
-        logRefreshRunnable?.let { handler.removeCallbacks(it) }
-        logRefreshRunnable = null
+    private fun appendLiveLog(line: String) {
+        liveLogLines.add(line)
+        if (liveLogLines.size > 50) liveLogLines.removeAt(0)
+        val v = syncView ?: return
+        val tv = v.findViewById<TextView>(R.id.tvLiveLog)
+        tv.text = liveLogLines.joinToString("\n")
+        val sv = v.findViewById<ScrollView>(R.id.scrollLiveLog)
+        sv.post { sv.fullScroll(View.FOCUS_DOWN) }
     }
 
     private fun updateProgress(progress: SyncProgress) {
-        binding.progressBar.visibility = View.VISIBLE
-        binding.tvProgressPercent.visibility = View.VISIBLE
-        binding.layoutStats.visibility = View.VISIBLE
-        binding.cardHistory.visibility = View.VISIBLE
+        val v = syncView ?: return
+        val pb = v.findViewById<android.widget.ProgressBar>(R.id.progressBar)
+        val tvDetail = v.findViewById<TextView>(R.id.tvProgressDetail)
+
+        pb.visibility = View.VISIBLE
+        tvDetail.visibility = View.VISIBLE
+        v.findViewById<View>(R.id.layoutStats).visibility = View.VISIBLE
 
         if (progress.total > 0) {
-            binding.progressBar.isIndeterminate = false
-            binding.progressBar.max = progress.total
-            binding.progressBar.progress = progress.done
+            pb.isIndeterminate = false
+            pb.max = progress.total
+            pb.progress = progress.done
             val pct = progress.done * 100 / progress.total
-            binding.tvProgressPercent.text = "${progress.done}/${progress.total} ($pct%)"
+            val totalMB = String.format("%.1f", progress.totalBytes / 1024.0 / 1024.0)
+            val doneMB = String.format("%.1f", progress.doneBytes / 1024.0 / 1024.0)
+            tvDetail.text = "${progress.done}/${progress.total} ($pct%) | ${doneMB}MB / ${totalMB}MB"
         }
 
-        binding.tvTotal.text = "전체: ${progress.total}"
-        binding.tvDone.text = "완료: ${progress.done - progress.errors - progress.skipped}"
-        binding.tvSkipped.text = "스킵: ${progress.skipped}"
-        binding.tvErrors.text = "실패: ${progress.errors}"
+        v.findViewById<TextView>(R.id.tvTotal).text = "전체: ${progress.total}"
+        val successCount = progress.done - progress.errors - progress.skipped
+        v.findViewById<TextView>(R.id.tvDone).text = "완료: $successCount"
+        v.findViewById<TextView>(R.id.tvSkipped).text = "스킵: ${progress.skipped}"
+        v.findViewById<TextView>(R.id.tvErrors).text = "실패: ${progress.errors}"
 
         if (progress.finished) {
             isSyncing = false
-            binding.btnSync.text = "동기화 시작"
-            binding.btnSync.setBackgroundColor(0xFF2E7D32.toInt())
-            stopLogRefresh()
+            v.findViewById<android.widget.Button>(R.id.btnSync).text = "동기화 시작"
+            v.findViewById<android.widget.Button>(R.id.btnSync).setBackgroundColor(0xFF2E7D32.toInt())
             if (progress.errorMessage != null) {
-                binding.tvStatus.text = "오류: ${progress.errorMessage}"
+                v.findViewById<TextView>(R.id.tvStatus).text = "오류: ${progress.errorMessage}"
             } else {
+                v.findViewById<TextView>(R.id.tvStatus).text = "동기화 완료! 성공:$successCount 스킵:${progress.skipped} 실패:${progress.errors}"
             }
             saveHistorySummary(progress)
             loadHistorySummary()
             refreshDetailLists()
+            updateRetryButton()
         } else {
-            binding.tvStatus.text = "동기화 중..."
+            v.findViewById<TextView>(R.id.tvStatus).text = "동기화 중..."
+        }
+    }
+
+    private fun updateRetryButton() {
+        val v = syncView ?: return
+        val btn = v.findViewById<android.widget.Button>(R.id.btnRetryFailed)
+        val failedCount = progressDb.getFailedRecords().size
+        if (failedCount > 0) {
+            btn.visibility = View.VISIBLE
+            btn.text = "🔄 실패 항목 재시도 (${failedCount}건)"
+        } else {
+            btn.visibility = View.GONE
+        }
+    }
+
+    private fun refreshDetailLists() {
+        val v = syncView ?: return
+        val successRecords = progressDb.getSuccessRecords()
+        val failedRecords = progressDb.getFailedRecords()
+        val dateFormat = SimpleDateFormat("MM/dd HH:mm", Locale.getDefault())
+
+        v.findViewById<TextView>(R.id.tvSuccessCount).text = "완료: ${successRecords.size}건"
+        v.findViewById<TextView>(R.id.tvSuccessList).text = if (successRecords.isEmpty()) "내역 없음"
+        else successRecords.take(200).joinToString("\n") { r ->
+            val time = dateFormat.format(Date(r.timestamp))
+            val size = if (r.fileSize > 0) formatSize(r.fileSize) else ""
+            "[$time] ${r.filename} $size"
+        }
+
+        v.findViewById<TextView>(R.id.tvFailedCount).text = "실패: ${failedRecords.size}건"
+        v.findViewById<TextView>(R.id.tvFailedList).text = if (failedRecords.isEmpty()) "내역 없음"
+        else failedRecords.joinToString("\n") { r ->
+            val time = dateFormat.format(Date(r.timestamp))
+            "[$time] ${r.filename}\n  > ${r.error}"
+        }
+    }
+
+    private fun formatSize(bytes: Long): String {
+        return when {
+            bytes >= 1024 * 1024 -> String.format("%.1fMB", bytes / 1024.0 / 1024.0)
+            bytes >= 1024 -> String.format("%.0fKB", bytes / 1024.0)
+            else -> "${bytes}B"
         }
     }
 
@@ -316,49 +314,126 @@ class MainActivity : AppCompatActivity() {
         val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
         val now = fmt.format(Date())
         val success = progress.done - progress.errors - progress.skipped
-        val entry = "$now | 성공:$success 스킵:${progress.skipped} 실패:${progress.errors} (전체:${progress.total})"
-
+        val totalMB = String.format("%.1f", progress.totalBytes / 1024.0 / 1024.0)
+        val entry = "$now | 성공:$success 스킵:${progress.skipped} 실패:${progress.errors} (전체:${progress.total}, ${totalMB}MB)"
         val history = prefs.getStringSet("entries", mutableSetOf())?.toMutableSet() ?: mutableSetOf()
         history.add(entry)
         prefs.edit().putStringSet("entries", history).putString("latest", entry).apply()
     }
 
     private fun loadHistorySummary() {
+        val v = syncView ?: return
         val prefs = getSharedPreferences("sync_history", MODE_PRIVATE)
         val history = prefs.getStringSet("entries", emptySet()) ?: emptySet()
-
+        val card = v.findViewById<View>(R.id.cardHistory)
         if (history.isNotEmpty()) {
-            binding.cardHistory.visibility = View.VISIBLE
+            card.visibility = View.VISIBLE
             val sorted = history.sortedDescending()
-            binding.tvHistorySummary.text = sorted.take(5).joinToString("\n")
+            v.findViewById<TextView>(R.id.tvHistorySummary).text = sorted.take(10).joinToString("\n")
         }
-
         val successCount = progressDb.getSuccessRecords().size
         val failedCount = progressDb.getFailedRecords().size
         if (successCount > 0 || failedCount > 0) {
-            binding.cardHistory.visibility = View.VISIBLE
+            card.visibility = View.VISIBLE
         }
     }
 
-    private fun updateUI() {
+    // ======== AUTH TAB ========
+    private fun setupAuthTab() {
+        val v = authView ?: return
+
+        v.findViewById<android.widget.Button>(R.id.btnGoogleSetup).setOnClickListener { showGoogleSetupDialog() }
+        v.findViewById<android.widget.Button>(R.id.btnGoogleAuth).setOnClickListener {
+            if (TokenManager.get(TokenManager.KEY_G_CLIENT_ID).isNullOrEmpty()) {
+                Toast.makeText(this, "먼저 API 설정을 하세요", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val intent = Intent(this, OAuthActivity::class.java)
+            intent.putExtra(OAuthActivity.EXTRA_TYPE, "google")
+            googleAuthLauncher.launch(intent)
+        }
+        v.findViewById<android.widget.Button>(R.id.btnMsSetup).setOnClickListener { showMsSetupDialog() }
+        v.findViewById<android.widget.Button>(R.id.btnMsAuth).setOnClickListener {
+            if (TokenManager.get(TokenManager.KEY_MS_CLIENT_ID).isNullOrEmpty()) {
+                Toast.makeText(this, "먼저 API 설정을 하세요", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val intent = Intent(this, OAuthActivity::class.java)
+            intent.putExtra(OAuthActivity.EXTRA_TYPE, "microsoft")
+            msAuthLauncher.launch(intent)
+        }
+        v.findViewById<android.widget.Button>(R.id.btnReset).setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("초기화")
+                .setMessage("모든 인증 정보와 동기화 기록을 삭제합니다.")
+                .setPositiveButton("확인") { _, _ ->
+                    TokenManager.clearAll()
+                    progressDb.reset()
+                    getSharedPreferences("sync_history", MODE_PRIVATE).edit().clear().apply()
+                    updateAuthUI()
+                    Toast.makeText(this, "초기화 완료", Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton("취소", null)
+                .show()
+        }
+        updateAuthUI()
+    }
+
+    private fun updateAuthUI() {
+        val v = authView ?: return
         val gId = TokenManager.get(TokenManager.KEY_G_CLIENT_ID)
         val gToken = TokenManager.get(TokenManager.KEY_G_ACCESS)
+        v.findViewById<TextView>(R.id.tvGoogleClientId).text =
+            if (!gId.isNullOrEmpty()) "Client ID: ${gId.take(20)}..." else "Client ID 미설정"
+        v.findViewById<TextView>(R.id.tvGoogleStatus).text =
+            if (TokenManager.isGoogleAuthed()) "✅ 인증 완료" else "❌ 미인증"
+        v.findViewById<android.widget.Button>(R.id.btnGoogleAuth).text =
+            if (!gToken.isNullOrEmpty()) "재인증" else "로그인"
 
         val msId = TokenManager.get(TokenManager.KEY_MS_CLIENT_ID)
         val msToken = TokenManager.get(TokenManager.KEY_MS_ACCESS)
-
-        val bothAuthed = !gToken.isNullOrEmpty() && !msToken.isNullOrEmpty()
-        binding.btnSync.isEnabled = bothAuthed
-
-        loadHistorySummary()
+        v.findViewById<TextView>(R.id.tvMsClientId).text =
+            if (!msId.isNullOrEmpty()) "Client ID: ${msId.take(20)}..." else "Client ID 미설정"
+        v.findViewById<TextView>(R.id.tvMsStatus).text =
+            if (TokenManager.isMicrosoftAuthed()) "✅ 인증 완료" else "❌ 미인증"
+        v.findViewById<android.widget.Button>(R.id.btnMsAuth).text =
+            if (!msToken.isNullOrEmpty()) "재인증" else "로그인"
     }
 
+    // ======== INFO TAB ========
+    private fun setupInfoTab() {
+        val v = infoView ?: return
+        val prefs = getSharedPreferences("app_settings", MODE_PRIVATE)
+        val current = prefs.getInt("theme", 0)
+
+        val rg = v.findViewById<RadioGroup>(R.id.rgTheme)
+        when (current) {
+            0 -> v.findViewById<RadioButton>(R.id.rbSystem).isChecked = true
+            1 -> v.findViewById<RadioButton>(R.id.rbLight).isChecked = true
+            2 -> v.findViewById<RadioButton>(R.id.rbDark).isChecked = true
+        }
+
+        rg.setOnCheckedChangeListener { _, checkedId ->
+            val mode = when (checkedId) {
+                R.id.rbLight -> 1
+                R.id.rbDark -> 2
+                else -> 0
+            }
+            prefs.edit().putInt("theme", mode).apply()
+            when (mode) {
+                0 -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM)
+                1 -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
+                2 -> AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_YES)
+            }
+        }
+    }
+
+    // ======== DIALOGS ========
     private fun showGoogleSetupDialog() {
         val layout = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(48, 32, 48, 16)
         }
-
         val etId = EditText(this).apply {
             hint = "Google Client ID"
             setText(TokenManager.get(TokenManager.KEY_G_CLIENT_ID) ?: "")
@@ -367,24 +442,11 @@ class MainActivity : AppCompatActivity() {
             hint = "Google Client Secret"
             setText(TokenManager.get(TokenManager.KEY_G_CLIENT_SECRET) ?: "")
         }
-
         layout.addView(etId)
-        layout.addView(android.view.View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
-                .apply { topMargin = 16; bottomMargin = 16 }
-            setBackgroundColor(0xFFCCCCCC.toInt())
-        })
         layout.addView(etSecret)
-        layout.addView(android.view.View(this).apply {
-            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
-                .apply { topMargin = 16; bottomMargin = 16 }
-            setBackgroundColor(0xFFCCCCCC.toInt())
-        })
         layout.addView(android.widget.Button(this).apply {
-            text = "📁 JSON 파일에서 가져오기"
-            setOnClickListener {
-                jsonFilePicker.launch("*/*")
-            }
+            text = "JSON 파일에서 가져오기"
+            setOnClickListener { jsonFilePicker.launch("*/*") }
         })
 
         AlertDialog.Builder(this)
@@ -396,7 +458,7 @@ class MainActivity : AppCompatActivity() {
                 if (id.isNotEmpty()) {
                     TokenManager.save(TokenManager.KEY_G_CLIENT_ID, id)
                     if (secret.isNotEmpty()) TokenManager.save(TokenManager.KEY_G_CLIENT_SECRET, secret)
-                    updateUI()
+                    updateAuthUI()
                     Toast.makeText(this, "저장 완료", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -409,7 +471,6 @@ class MainActivity : AppCompatActivity() {
             orientation = LinearLayout.VERTICAL
             setPadding(48, 32, 48, 16)
         }
-
         val etId = EditText(this).apply {
             hint = "Microsoft Client ID"
             setText(TokenManager.get(TokenManager.KEY_MS_CLIENT_ID) ?: "")
@@ -423,7 +484,7 @@ class MainActivity : AppCompatActivity() {
                 val id = etId.text.toString().trim()
                 if (id.isNotEmpty()) {
                     TokenManager.save(TokenManager.KEY_MS_CLIENT_ID, id)
-                    updateUI()
+                    updateAuthUI()
                     Toast.makeText(this, "저장 완료", Toast.LENGTH_SHORT).show()
                 }
             }
@@ -436,10 +497,8 @@ class MainActivity : AppCompatActivity() {
             val inputStream = contentResolver.openInputStream(uri)
             val jsonStr = inputStream?.bufferedReader()?.readText() ?: return
             val json = JSONObject(jsonStr)
-
             var clientId = ""
             var clientSecret = ""
-
             if (json.has("installed")) {
                 val installed = json.getJSONObject("installed")
                 clientId = installed.optString("client_id", "")
@@ -452,14 +511,13 @@ class MainActivity : AppCompatActivity() {
                 clientId = json.optString("client_id", "")
                 clientSecret = json.optString("client_secret", "")
             }
-
             if (clientId.isNotEmpty()) {
                 TokenManager.save(TokenManager.KEY_G_CLIENT_ID, clientId)
                 if (clientSecret.isNotEmpty()) TokenManager.save(TokenManager.KEY_G_CLIENT_SECRET, clientSecret)
-                updateUI()
+                updateAuthUI()
                 Toast.makeText(this, "JSON에서 가져오기 완료", Toast.LENGTH_SHORT).show()
             } else {
-                Toast.makeText(this, "JSON에서 Client ID를 찾을 수 없습니다", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Client ID를 찾을 수 없습니다", Toast.LENGTH_LONG).show()
             }
         } catch (e: Exception) {
             Toast.makeText(this, "JSON 파싱 오류: ${e.message}", Toast.LENGTH_LONG).show()
@@ -468,11 +526,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        updateUI()
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        stopLogRefresh()
+        updateAuthUI()
     }
 }

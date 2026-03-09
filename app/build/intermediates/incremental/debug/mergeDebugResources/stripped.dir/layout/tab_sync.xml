@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="20dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="📷 GPhotoSync"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:textColor="?colorPrimary"
+            android:gravity="center"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Google Photos → OneDrive"
+            android:textSize="13sp"
+            android:textColor="?android:textColorSecondary"
+            android:gravity="center"
+            android:layout_marginBottom="20dp" />
+
+        <!-- 진행 상황 카드 -->
+        <androidx.cardview.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp"
+            app:cardBackgroundColor="?android:colorBackground">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <ProgressBar
+                    android:id="@+id/progressBar"
+                    style="@style/Widget.AppCompat.ProgressBar.Horizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginBottom="4dp"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/tvProgressDetail"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="12sp"
+                    android:textColor="?android:textColorSecondary"
+                    android:gravity="end"
+                    android:visibility="gone"
+                    android:layout_marginBottom="6dp" />
+
+                <LinearLayout
+                    android:id="@+id/layoutStats"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:visibility="gone"
+                    android:layout_marginBottom="6dp">
+                    <TextView android:id="@+id/tvTotal" android:layout_width="0dp"
+                        android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="전체: 0" android:textSize="11sp" android:gravity="center" />
+                    <TextView android:id="@+id/tvDone" android:layout_width="0dp"
+                        android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="완료: 0" android:textSize="11sp" android:textColor="#4CAF50" android:gravity="center" />
+                    <TextView android:id="@+id/tvSkipped" android:layout_width="0dp"
+                        android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="스킵: 0" android:textSize="11sp" android:textColor="#FF8F00" android:gravity="center" />
+                    <TextView android:id="@+id/tvErrors" android:layout_width="0dp"
+                        android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="실패: 0" android:textSize="11sp" android:textColor="#F44336" android:gravity="center" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="동기화를 시작하세요"
+                    android:textSize="13sp"
+                    android:textColor="?android:textColorPrimary"
+                    android:layout_marginBottom="12dp" />
+
+                <Button
+                    android:id="@+id/btnSync"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:text="동기화 시작"
+                    android:textSize="15sp"
+                    android:backgroundTint="#2E7D32" />
+
+                <Button
+                    android:id="@+id/btnRetryFailed"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:text="🔄 실패 항목 재시도"
+                    android:textSize="13sp"
+                    android:backgroundTint="#FF5722"
+                    android:layout_marginTop="8dp"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- 실시간 로그 -->
+        <androidx.cardview.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp"
+            app:cardBackgroundColor="?android:colorBackground">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📋 실시간 로그"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="?android:textColorPrimary"
+                    android:layout_marginBottom="8dp" />
+                <ScrollView
+                    android:id="@+id/scrollLiveLog"
+                    android:layout_width="match_parent"
+                    android:layout_height="150dp">
+                    <TextView
+                        android:id="@+id/tvLiveLog"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="대기 중..."
+                        android:textSize="10sp"
+                        android:textColor="?android:textColorSecondary"
+                        android:fontFamily="monospace" />
+                </ScrollView>
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- 과거 실행 기록 -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardHistory"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp"
+            app:cardBackgroundColor="?android:colorBackground"
+            android:visibility="gone">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📂 실행 기록"
+                    android:textSize="14sp"
+                    android:textStyle="bold"
+                    android:textColor="?android:textColorPrimary"
+                    android:layout_marginBottom="8dp" />
+                <ScrollView
+                    android:id="@+id/scrollHistory"
+                    android:layout_width="match_parent"
+                    android:layout_height="120dp">
+                    <TextView
+                        android:id="@+id/tvHistorySummary"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="기록 없음"
+                        android:textSize="11sp"
+                        android:textColor="?android:textColorSecondary"
+                        android:fontFamily="monospace" />
+                </ScrollView>
+                <Button
+                    android:id="@+id/btnShowDetail"
+                    android:layout_width="match_parent"
+                    android:layout_height="36dp"
+                    android:text="📄 상세 내역 보기"
+                    android:textSize="12sp"
+                    android:layout_marginTop="8dp"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+        <!-- 상세 내역 -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardDetails"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp"
+            app:cardBackgroundColor="?android:colorBackground"
+            android:visibility="gone">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="8dp">
+                    <Button android:id="@+id/btnTabSuccess" android:layout_width="0dp"
+                        android:layout_height="36dp" android:layout_weight="1"
+                        android:text="✅ 완료" android:textSize="11sp"
+                        android:layout_marginEnd="4dp" android:backgroundTint="#4CAF50" />
+                    <Button android:id="@+id/btnTabFailed" android:layout_width="0dp"
+                        android:layout_height="36dp" android:layout_weight="1"
+                        android:text="❌ 실패" android:textSize="11sp"
+                        android:layout_marginStart="4dp" android:backgroundTint="#9E9E9E" />
+                </LinearLayout>
+                <LinearLayout android:id="@+id/layoutSuccess"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="vertical">
+                    <TextView android:id="@+id/tvSuccessCount"
+                        android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:text="완료: 0건" android:textSize="11sp" android:textColor="?android:textColorSecondary" />
+                    <ScrollView android:layout_width="match_parent" android:layout_height="180dp">
+                        <TextView android:id="@+id/tvSuccessList"
+                            android:layout_width="match_parent" android:layout_height="wrap_content"
+                            android:text="내역 없음" android:textSize="10sp"
+                            android:textColor="?android:textColorSecondary" android:fontFamily="monospace" />
+                    </ScrollView>
+                </LinearLayout>
+                <LinearLayout android:id="@+id/layoutFailed"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="vertical" android:visibility="gone">
+                    <TextView android:id="@+id/tvFailedCount"
+                        android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:text="실패: 0건" android:textSize="11sp" android:textColor="?android:textColorSecondary" />
+                    <ScrollView android:layout_width="match_parent" android:layout_height="180dp">
+                        <TextView android:id="@+id/tvFailedList"
+                            android:layout_width="match_parent" android:layout_height="wrap_content"
+                            android:text="내역 없음" android:textSize="10sp"
+                            android:textColor="#F44336" android:fontFamily="monospace" />
+                    </ScrollView>
+                </LinearLayout>
+                <Button android:id="@+id/btnHideDetail"
+                    android:layout_width="match_parent" android:layout_height="32dp"
+                    android:text="접기" android:textSize="11sp" android:layout_marginTop="4dp"
+                    style="@style/Widget.MaterialComponents.Button.TextButton" />
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
+    </LinearLayout>
+</ScrollView>

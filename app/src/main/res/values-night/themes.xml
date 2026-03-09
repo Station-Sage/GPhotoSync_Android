@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.GPhotoSync" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <item name="colorPrimary">#3949AB</item>
+        <item name="colorPrimaryVariant">#1A237E</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="colorSecondary">#64B5F6</item>
+        <item name="colorOnSecondary">#000000</item>
+        <item name="android:statusBarColor">#1A237E</item>
+    </style>
+</resources>

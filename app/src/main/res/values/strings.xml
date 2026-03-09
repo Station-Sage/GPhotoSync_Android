@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">GPhotoSync</string>
+    <string name="menu_sync">동기화</string>
+    <string name="menu_auth">인증</string>
+    <string name="menu_info">정보</string>
 </resources>

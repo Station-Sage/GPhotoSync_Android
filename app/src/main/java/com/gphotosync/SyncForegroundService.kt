@@ -20,8 +20,6 @@ class SyncForegroundService : Service() {
         var progressCallback: ((SyncProgress) -> Unit)? = null
         var retryItems: List<SyncRecord>? = null
         var logCallback: ((String) -> Unit)? = null
-        var syncDateFrom: Long? = null
-        var syncDateTo: Long? = null
     }
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -161,36 +159,24 @@ class SyncForegroundService : Service() {
         while (!listDone && scope.isActive) delay(200)
 
         logToFile("fullSync - picked items: ${allItems.size}")
+        
 
-        // Date range filter
-        val filteredItems = if (syncDateFrom != null || syncDateTo != null) {
-            allItems.filter { item ->
-                try {
-                    val fmt = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-                    val itemDate = fmt.parse(item.createdAt.take(10))?.time ?: 0L
-                    val fromOk = syncDateFrom == null || itemDate >= syncDateFrom!!
-                    val toOk = syncDateTo == null || itemDate <= syncDateTo!!
-                    fromOk && toOk
-                } catch (_: Exception) { true }
-            }
-        } else allItems
-        logToFile("Date filtered: ${filteredItems.size} / ${allItems.size}")
-        val allItemsFiltered = filteredItems
-
-        val total = allItemsFiltered.size
+        val total = allItems.size
         var done = 0
         var errors = 0
         var skipped = 0
+        var doneBytes = 0L
+        var totalBytes = 0L
 
         progressDb.setTotalCount(total)
         notifyProgress("동기화 시작 (${total}개)", done, total)
 
-        for (item in allItemsFiltered) {
+        for (item in allItems) {
             if (!scope.isActive) break
 
             if (item.id in synced) {
                 done++; skipped++
-                progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped))
+                progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped, totalBytes, doneBytes))
                 continue
             }
 
@@ -203,7 +189,7 @@ class SyncForegroundService : Service() {
                 errors++; done++
                 logToFile("DOWNLOAD FAILED: ${item.filename}")
                 progressDb.addFailedRecord(SyncRecord(item.id, item.filename, "failed", "다운로드 실패", fileSize = 0))
-                progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped))
+                progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped, totalBytes, doneBytes))
                 continue
             }
 
@@ -211,11 +197,11 @@ class SyncForegroundService : Service() {
             if (prevSize == fileData!!.size.toLong()) {
                 synced.add(item.id); progressDb.saveSyncedId(item.id)
                 done++; skipped++
-                progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped))
+                progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped, totalBytes, doneBytes))
                 continue
             }
 
-            val folderPath = "${oneDriveApi.rootFolder}/${item.yearMonth}"
+            val folderPath = "${oneDriveApi.rootFolder}/${item.year}"
             var uploadDone = false
             var uploadOk = false
             logToFile("[SYNC] ensureFolder calling: $folderPath")
@@ -236,15 +222,16 @@ class SyncForegroundService : Service() {
                 progressDb.addSuccessRecord(SyncRecord(item.id, item.filename, "success", fileSize = fileData!!.size.toLong()))
                 progressDb.removeFailedRecord(item.id)
                 logToFile("UPLOAD OK: ${item.filename}")
+                doneBytes += fileData!!.size.toLong()
                 done++
                 val pct = if (total > 0) (done * 100 / total) else 0
                 notifyProgress("동기화 중 ($pct%) - ${item.filename}", done, total)
-                progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped))
+                progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped, totalBytes, doneBytes))
             } else {
                 errors++; done++
                 logToFile("UPLOAD FAILED: ${item.filename}")
                 progressDb.addFailedRecord(SyncRecord(item.id, item.filename, "failed", "업로드 실패", fileSize = fileData?.size?.toLong() ?: 0))
-                progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped))
+                progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped, totalBytes, doneBytes))
             }
             delay(300)
         }
@@ -254,7 +241,7 @@ class SyncForegroundService : Service() {
         val msg = if (scope.isActive) "완료! 성공:${done - errors - skipped} 스킵:${skipped} 실패:${errors}" else "동기화 중단됨"
         notifyProgress(msg, done, total)
         progressDb.setDoneCount(done)
-        progressCallback?.invoke(SyncProgress(done, total, errors, true, null, skipped))
+        progressCallback?.invoke(SyncProgress(done, total, errors, true, null, skipped, totalBytes, doneBytes))
     }
 
     private suspend fun retrySync(
@@ -288,8 +275,8 @@ class SyncForegroundService : Service() {
                 continue
             }
 
-            val yearMonth = record.filename.substringBefore("_", "unknown")
-            val folderPath = "${oneDriveApi.rootFolder}/$yearMonth"
+            val year = record.filename.take(4).let { if (it.all { c -> c.isDigit() }) it else "unknown" }
+            val folderPath = "${oneDriveApi.rootFolder}/$year"
             var uploadDone = false
             var uploadOk = false
             logToFile("[SYNC] ensureFolder calling: $folderPath")
@@ -380,5 +367,7 @@ data class SyncProgress(
     val errors: Int,
     val finished: Boolean,
     val errorMessage: String?,
-    val skipped: Int = 0
+    val skipped: Int = 0,
+    val totalBytes: Long = 0L,
+    val doneBytes: Long = 0L
 )

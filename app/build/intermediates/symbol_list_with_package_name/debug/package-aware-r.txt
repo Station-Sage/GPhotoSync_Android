@@ -3192,8 +3192,6 @@ id browser_actions_menu_item_icon
 id browser_actions_menu_item_text
 id browser_actions_menu_items
 id browser_actions_menu_view
-id btnDateFrom
-id btnDateTo
 id btnGoogleAuth
 id btnGoogleSetup
 id btnHideDetail
@@ -3235,6 +3233,7 @@ id confirm_button
 id constraint
 id container
 id content
+id contentFrame
 id contentPanel
 id contiguous
 id continuousVelocity
@@ -3471,9 +3470,13 @@ id progress_circular
 id progress_horizontal
 id radio
 id ratio
+id rbDark
+id rbLight
+id rbSystem
 id rectangles
 id report_drawn
 id reverseSawtooth
+id rgTheme
 id right
 id rightToLeft
 id right_icon
@@ -3486,8 +3489,10 @@ id sawtooth
 id scale
 id screen
 id scroll
+id scrollHistory
 id scrollIndicatorDown
 id scrollIndicatorUp
+id scrollLiveLog
 id scrollView
 id scrollable
 id search_badge
@@ -3541,6 +3546,7 @@ id stretch
 id submenuarrow
 id submit_area
 id supportScrollUp
+id tabLayout
 id tabMode
 id tag_accessibility_actions
 id tag_accessibility_clickable_spans
@@ -3587,7 +3593,6 @@ id transition_position
 id transition_scene_layoutid_cache
 id transition_transform
 id triangle
-id tvDateRange
 id tvDone
 id tvErrors
 id tvFailedCount
@@ -3598,7 +3603,7 @@ id tvHistorySummary
 id tvLiveLog
 id tvMsClientId
 id tvMsStatus
-id tvProgressPercent
+id tvProgressDetail
 id tvSkipped
 id tvStatus
 id tvSuccessCount
@@ -3825,6 +3830,9 @@ layout select_dialog_item_material
 layout select_dialog_multichoice_material
 layout select_dialog_singlechoice_material
 layout support_simple_spinner_dropdown_item
+layout tab_auth
+layout tab_info
+layout tab_sync
 mipmap ic_launcher
 mipmap ic_launcher_round
 plurals mtrl_badge_content_description
@@ -3925,6 +3933,9 @@ string material_timepicker_minute
 string material_timepicker_pm
 string material_timepicker_select_time
 string material_timepicker_text_input_mode_description
+string menu_auth
+string menu_info
+string menu_sync
 string mtrl_badge_numberless_content_description
 string mtrl_checkbox_button_icon_path_checked
 string mtrl_checkbox_button_icon_path_group_name

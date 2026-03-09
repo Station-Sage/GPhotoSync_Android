@@ -1,5 +1,9 @@
 [
     {
+        "merged": "com.gphotosync.app-merged_res-43:/layout_tab_sync.xml.flat",
+        "source": "com.gphotosync.app-main-45:/layout/tab_sync.xml"
+    },
+    {
         "merged": "com.gphotosync.app-merged_res-43:/layout_activity_main.xml.flat",
         "source": "com.gphotosync.app-main-45:/layout/activity_main.xml"
     },
@@ -34,6 +38,14 @@
     {
         "merged": "com.gphotosync.app-merged_res-43:/mipmap-mdpi_ic_launcher.png.flat",
         "source": "com.gphotosync.app-main-45:/mipmap-mdpi/ic_launcher.png"
+    },
+    {
+        "merged": "com.gphotosync.app-merged_res-43:/layout_tab_auth.xml.flat",
+        "source": "com.gphotosync.app-main-45:/layout/tab_auth.xml"
+    },
+    {
+        "merged": "com.gphotosync.app-merged_res-43:/layout_tab_info.xml.flat",
+        "source": "com.gphotosync.app-main-45:/layout/tab_info.xml"
     },
     {
         "merged": "com.gphotosync.app-merged_res-43:/mipmap-anydpi-v26_ic_launcher.xml.flat",

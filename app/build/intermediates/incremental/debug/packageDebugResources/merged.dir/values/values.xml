@@ -5,14 +5,15 @@
     <color name="colorPrimaryDark">#0D1B8E</color>
     <color name="ic_launcher_background">#2196F3</color>
     <string name="app_name">GPhotoSync</string>
-    <style name="Theme.GPhotoSync" parent="Theme.MaterialComponents.DayNight.DarkActionBar">
+    <string name="menu_auth">인증</string>
+    <string name="menu_info">정보</string>
+    <string name="menu_sync">동기화</string>
+    <style name="Theme.GPhotoSync" parent="Theme.MaterialComponents.DayNight.NoActionBar">
         <item name="colorPrimary">#1A237E</item>
         <item name="colorPrimaryVariant">#0D1B8E</item>
         <item name="colorOnPrimary">#FFFFFF</item>
         <item name="colorSecondary">#2196F3</item>
         <item name="colorOnSecondary">#FFFFFF</item>
-        <item name="android:statusBarColor">@color/colorPrimaryDark</item>
-        <item name="windowNoTitle">true</item>
-        <item name="windowActionBar">false</item>
+        <item name="android:statusBarColor">#0D1B8E</item>
     </style>
 </resources>

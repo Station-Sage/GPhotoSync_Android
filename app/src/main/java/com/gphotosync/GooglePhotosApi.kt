@@ -17,6 +17,7 @@ data class MediaItem(
     val isVideo: Boolean
 ) {
     val yearMonth: String get() = if (createdAt.length >= 7) createdAt.substring(0, 7) else "unknown"
+    val year: String get() = if (createdAt.length >= 4) createdAt.substring(0, 4) else "unknown"
 }
 
 class GooglePhotosApi(private val context: Context) {
