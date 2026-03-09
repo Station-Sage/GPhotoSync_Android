@@ -14,6 +14,9 @@ import okhttp3.*
 import org.json.JSONObject
 import java.io.IOException
 import java.net.URLEncoder
+import java.security.MessageDigest
+import java.security.SecureRandom
+import android.util.Base64
 
 class OAuthActivity : AppCompatActivity() {
 
@@ -23,12 +26,13 @@ class OAuthActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_TYPE = "oauth_type"
         const val GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
-        const val MS_TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+        const val MS_TOKEN_URL = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token"
         private const val REDIRECT_URI = "http://localhost"
     }
 
     private var oauthType: String = "google"
     private var codeHandled = false
+    private var codeVerifier: String = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,7 +42,6 @@ class OAuthActivity : AppCompatActivity() {
         oauthType = intent.getStringExtra(EXTRA_TYPE) ?: "google"
         codeHandled = false
 
-        // 브라우저에서 인증 페이지 열기
         val authUrl = buildAuthUrl(oauthType)
         try {
             val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
@@ -49,8 +52,18 @@ class OAuthActivity : AppCompatActivity() {
             return
         }
 
-        // 코드 입력 다이얼로그 표시
         showCodeInputDialog()
+    }
+
+    private fun generateCodeVerifier(): String {
+        val bytes = ByteArray(32)
+        SecureRandom().nextBytes(bytes)
+        return Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
+    }
+
+    private fun generateCodeChallenge(verifier: String): String {
+        val digest = MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray(Charsets.US_ASCII))
+        return Base64.encodeToString(digest, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
     }
 
     private fun buildAuthUrl(type: String): String {
@@ -70,14 +83,18 @@ class OAuthActivity : AppCompatActivity() {
             }
             "microsoft" -> {
                 val clientId = TokenManager.get(TokenManager.KEY_MS_CLIENT_ID) ?: ""
+                codeVerifier = generateCodeVerifier()
+                val codeChallenge = generateCodeChallenge(codeVerifier)
                 val params = mapOf(
                     "client_id" to clientId,
                     "response_type" to "code",
                     "redirect_uri" to REDIRECT_URI,
                     "scope" to "Files.ReadWrite offline_access",
-                    "response_mode" to "query"
+                    "response_mode" to "query",
+                    "code_challenge" to codeChallenge,
+                    "code_challenge_method" to "S256"
                 )
-                "https://login.microsoftonline.com/common/oauth2/v2.0/authorize?" + params.entries
+                "https://login.microsoftonline.com/consumers/oauth2/v2.0/authorize?" + params.entries
                     .joinToString("&") { "${it.key}=${URLEncoder.encode(it.value, "UTF-8")}" }
             }
             else -> ""
@@ -92,9 +109,8 @@ class OAuthActivity : AppCompatActivity() {
 
         AlertDialog.Builder(this)
             .setTitle("인증 코드 입력")
-            .setMessage("브라우저에서 Google 로그인 후,\n주소창이 http://localhost/?code=XXXX 로 바뀝니다.\n\n" +
-                "1. 주소창의 전체 URL을 복사하거나\n" +
-                "2. code= 뒤의 값만 복사해서 붙여넣으세요.\n\n" +
+            .setMessage("브라우저에서 로그인 후,\n주소창이 http://localhost/?code=XXXX 로 바뀝니다.\n\n" +
+                "주소창의 전체 URL을 복사해서 붙여넣으세요.\n\n" +
                 "(페이지가 로드 안 되는 게 정상입니다)")
             .setView(editText)
             .setCancelable(false)
@@ -129,17 +145,14 @@ class OAuthActivity : AppCompatActivity() {
     }
 
     private fun extractCode(input: String): String {
-        // URL 형태: http://localhost/?code=4/0XXXX&scope=...
         if (input.contains("code=")) {
             val uri = Uri.parse(input)
             val code = uri.getQueryParameter("code")
             if (!code.isNullOrEmpty()) return code
-            // 수동 파싱
             val start = input.indexOf("code=") + 5
             val end = input.indexOf("&", start).let { if (it == -1) input.length else it }
             return input.substring(start, end)
         }
-        // 코드 직접 입력
         return input
     }
 
@@ -164,6 +177,7 @@ class OAuthActivity : AppCompatActivity() {
             "microsoft" -> {
                 tokenUrl = MS_TOKEN_URL
                 formBuilder.add("client_id", TokenManager.get(TokenManager.KEY_MS_CLIENT_ID) ?: "")
+                formBuilder.add("code_verifier", codeVerifier)
                 formBuilder.add("scope", "Files.ReadWrite offline_access")
             }
             else -> return

@@ -218,7 +218,7 @@ class MainActivity : AppCompatActivity() {
             addView(android.widget.Button(this@MainActivity).apply {
                 text = "JSON 파일 업로드"
                 setOnClickListener {
-                    jsonFilePicker.launch("application/json")
+                    jsonFilePicker.launch("*/*")
                 }
             })
 
