@@ -63,7 +63,7 @@ class SyncForegroundService : Service() {
                 val allItems = mutableListOf<MediaItem>()
                 var listDone = false
                 googleApi.listAllMedia(
-                    onPage  = { items, count -> allItems.addAll(items); notifyProgress("목록 수집 중... $count개", 0, count) },
+                    onPage  = { items, count -> allItems.addAll(items); notifyProgress("목록 수집 중... ${count}개", 0, count) },
                     onDone  = { _ -> listDone = true },
                     onError = { err -> notifyProgress("오류: $err", 0, 0) }
                 )
@@ -115,7 +115,7 @@ class SyncForegroundService : Service() {
                 }
 
                 // 4. 완료
-                val msg = if (isActive) "동기화 완료! $done개 성공, $errors개 오류" else "동기화 중단됨"
+                val msg = if (isActive) "동기화 완료! ${done}개 성공, ${errors}개 오류" else "동기화 중단됨"
                 notifyProgress(msg, done, total)
                 progressCallback?.invoke(SyncProgress(done, total, errors, true, null))
 
