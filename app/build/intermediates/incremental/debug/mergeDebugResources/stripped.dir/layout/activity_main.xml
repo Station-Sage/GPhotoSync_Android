@@ -31,7 +31,6 @@
             android:gravity="center"
             android:layout_marginBottom="24dp" />
 
-        <!-- Google 섹션 -->
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -65,7 +64,6 @@
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- Microsoft 섹션 -->
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -99,7 +97,43 @@
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- 동기화 섹션 -->
+        <androidx.cardview.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="4dp">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="📅 동기화 기간" android:textSize="18sp" android:textStyle="bold"
+                    android:textColor="#6A1B9A" android:layout_marginBottom="12dp" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical">
+                    <Button android:id="@+id/btnDateFrom" android:layout_width="0dp"
+                        android:layout_height="44dp" android:layout_weight="1"
+                        android:text="시작일" android:textSize="13sp"
+                        android:layout_marginEnd="8dp"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+                    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                        android:text="~" android:textSize="18sp" android:textColor="#666" />
+                    <Button android:id="@+id/btnDateTo" android:layout_width="0dp"
+                        android:layout_height="44dp" android:layout_weight="1"
+                        android:text="종료일" android:textSize="13sp"
+                        android:layout_marginStart="8dp"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+                </LinearLayout>
+                <TextView android:id="@+id/tvDateRange" android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="전체 기간 동기화"
+                    android:textSize="12sp" android:textColor="#888"
+                    android:gravity="center" android:layout_marginTop="8dp" />
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -135,7 +169,6 @@
                     android:visibility="gone"
                     android:layout_marginBottom="8dp" />
 
-                <!-- 통계 -->
                 <LinearLayout
                     android:id="@+id/layoutStats"
                     android:layout_width="match_parent"
@@ -164,6 +197,17 @@
                     android:text="두 계정 인증 후 동기화를 시작하세요"
                     android:textSize="13sp"
                     android:textColor="#555"
+                    android:layout_marginBottom="8dp" />
+
+                <TextView
+                    android:id="@+id/tvLiveLog"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="11sp"
+                    android:textColor="#555"
+                    android:fontFamily="monospace"
+                    android:maxLines="3"
                     android:layout_marginBottom="16dp" />
 
                 <Button
@@ -177,7 +221,44 @@
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- 상세 내역 탭 -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardHistory"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="4dp"
+            android:visibility="gone">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="📋 실행 기록" android:textSize="18sp" android:textStyle="bold"
+                    android:textColor="#37474F" android:layout_marginBottom="12dp" />
+
+                <TextView android:id="@+id/tvHistorySummary"
+                    android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:text="기록 없음" android:textSize="13sp" android:textColor="#555"
+                    android:layout_marginBottom="8dp" />
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+                    <Button android:id="@+id/btnShowDetail" android:layout_width="0dp"
+                        android:layout_height="40dp" android:layout_weight="1"
+                        android:text="📄 상세 보기" android:textSize="12sp"
+                        android:layout_marginEnd="4dp"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+                    <Button android:id="@+id/btnRetryFailed" android:layout_width="0dp"
+                        android:layout_height="40dp" android:layout_weight="1"
+                        android:text="🔄 실패 재시도" android:textSize="12sp"
+                        android:layout_marginStart="4dp"
+                        android:backgroundTint="#FF5722" />
+                </LinearLayout>
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
         <androidx.cardview.widget.CardView
             android:id="@+id/cardDetails"
             android:layout_width="match_parent"
@@ -193,10 +274,9 @@
                 android:padding="20dp">
 
                 <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
-                    android:text="📋 진행 상세" android:textSize="18sp" android:textStyle="bold"
+                    android:text="📋 상세 내역" android:textSize="18sp" android:textStyle="bold"
                     android:textColor="#37474F" android:layout_marginBottom="12dp" />
 
-                <!-- 탭 버튼 -->
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -222,7 +302,6 @@
                         android:backgroundTint="#9E9E9E" />
                 </LinearLayout>
 
-                <!-- 완료 내역 -->
                 <LinearLayout
                     android:id="@+id/layoutSuccess"
                     android:layout_width="match_parent"
@@ -243,7 +322,6 @@
                     </ScrollView>
                 </LinearLayout>
 
-                <!-- 실패 내역 -->
                 <LinearLayout
                     android:id="@+id/layoutFailed"
                     android:layout_width="match_parent"
@@ -262,15 +340,13 @@
                             android:text="내역 없음" android:textSize="11sp" android:textColor="#D32F2F"
                             android:fontFamily="monospace" />
                     </ScrollView>
-                    <Button
-                        android:id="@+id/btnRetryFailed"
-                        android:layout_width="match_parent"
-                        android:layout_height="44dp"
-                        android:text="🔄 실패 항목 재시도"
-                        android:textSize="13sp"
-                        android:backgroundTint="#FF5722"
-                        android:layout_marginTop="8dp" />
                 </LinearLayout>
+
+                <Button android:id="@+id/btnHideDetail"
+                    android:layout_width="match_parent" android:layout_height="36dp"
+                    android:text="접기" android:textSize="12sp"
+                    android:layout_marginTop="8dp"
+                    style="@style/Widget.MaterialComponents.Button.TextButton" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 

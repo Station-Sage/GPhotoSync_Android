@@ -1,10 +1,13 @@
 package com.gphotosync
 
 import android.app.Activity
+import android.app.DatePickerDialog
 import android.view.View
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.Toast
@@ -14,6 +17,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.gphotosync.databinding.ActivityMainBinding
 import org.json.JSONObject
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -22,12 +26,16 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var progressDb: SyncProgressStore
     private var isSyncing = false
+    private var dateFrom: Long? = null
+    private var dateTo: Long? = null
+
+    private val handler = Handler(Looper.getMainLooper())
+    private var logRefreshRunnable: Runnable? = null
 
     private val googleAuthLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            Toast.makeText(this, "Google 인증 성공!", Toast.LENGTH_SHORT).show()
         }
         updateUI()
     }
@@ -36,7 +44,6 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            Toast.makeText(this, "Microsoft 인증 성공!", Toast.LENGTH_SHORT).show()
         }
         updateUI()
     }
@@ -58,9 +65,13 @@ class MainActivity : AppCompatActivity() {
         setupButtons()
         updateUI()
         setupDetailTabs()
+        loadHistorySummary()
 
         SyncForegroundService.progressCallback = { progress ->
             runOnUiThread { updateProgress(progress) }
+        }
+        SyncForegroundService.logCallback = { line ->
+            runOnUiThread { appendLiveLog(line) }
         }
     }
 
@@ -95,6 +106,7 @@ class MainActivity : AppCompatActivity() {
                 isSyncing = false
                 binding.btnSync.text = "동기화 시작"
                 binding.btnSync.setBackgroundColor(0xFF2E7D32.toInt())
+                stopLogRefresh()
             } else {
                 startSync()
             }
@@ -115,6 +127,46 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnRetryFailed.setOnClickListener { retryFailed() }
+
+        binding.btnShowDetail.setOnClickListener {
+            binding.cardDetails.visibility = View.VISIBLE
+            refreshDetailLists()
+        }
+
+        binding.btnHideDetail.setOnClickListener {
+            binding.cardDetails.visibility = View.GONE
+        }
+
+        // Date pickers
+        binding.btnDateFrom.setOnClickListener { showDatePicker(true) }
+        binding.btnDateTo.setOnClickListener { showDatePicker(false) }
+    }
+
+    private fun showDatePicker(isFrom: Boolean) {
+        val cal = Calendar.getInstance()
+
+        DatePickerDialog(this, { _, y, m, d ->
+            val selected = Calendar.getInstance()
+            selected.set(y, m, d, if (isFrom) 0 else 23, if (isFrom) 0 else 59, if (isFrom) 0 else 59)
+            val ts = selected.timeInMillis
+            val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+
+            if (isFrom) {
+                dateFrom = ts
+                binding.btnDateFrom.text = fmt.format(Date(ts))
+            } else {
+                dateTo = ts
+                binding.btnDateTo.text = fmt.format(Date(ts))
+            }
+            updateDateRangeText()
+        }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
+    }
+
+    private fun updateDateRangeText() {
+        val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+        val from = if (dateFrom != null) fmt.format(Date(dateFrom!!)) else "처음"
+        val to = if (dateTo != null) fmt.format(Date(dateTo!!)) else "현재"
+        binding.tvDateRange.text = "$from ~ $to 기간 동기화"
     }
 
     private fun setupDetailTabs() {
@@ -170,16 +222,27 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var liveLogLines = mutableListOf<String>()
+
+    private fun appendLiveLog(line: String) {
+        liveLogLines.add(line)
+        if (liveLogLines.size > 5) liveLogLines.removeAt(0)
+        binding.tvLiveLog.text = liveLogLines.joinToString("\n")
+    }
+
     private fun startSync() {
-        try { java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "sync_log.txt").appendText("${java.util.Date()} startSync called\n") } catch (_: Exception) {}
         isSyncing = true
+        liveLogLines.clear()
+        binding.tvLiveLog.text = ""
         binding.btnSync.text = "동기화 중단"
         binding.btnSync.setBackgroundColor(0xFFF44336.toInt())
         binding.progressBar.visibility = View.VISIBLE
         binding.tvProgressPercent.visibility = View.VISIBLE
         binding.layoutStats.visibility = View.VISIBLE
-        binding.cardDetails.visibility = View.VISIBLE
         binding.progressBar.isIndeterminate = true
+
+        SyncForegroundService.syncDateFrom = dateFrom
+        SyncForegroundService.syncDateTo = dateTo
 
         val intent = Intent(this, SyncForegroundService::class.java)
         intent.action = SyncForegroundService.ACTION_START
@@ -194,6 +257,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         isSyncing = true
+        liveLogLines.clear()
+        binding.tvLiveLog.text = ""
         binding.btnSync.text = "동기화 중단"
         binding.btnSync.setBackgroundColor(0xFFF44336.toInt())
         binding.progressBar.visibility = View.VISIBLE
@@ -205,11 +270,16 @@ class MainActivity : AppCompatActivity() {
         startForegroundService(intent)
     }
 
+    private fun stopLogRefresh() {
+        logRefreshRunnable?.let { handler.removeCallbacks(it) }
+        logRefreshRunnable = null
+    }
+
     private fun updateProgress(progress: SyncProgress) {
         binding.progressBar.visibility = View.VISIBLE
         binding.tvProgressPercent.visibility = View.VISIBLE
         binding.layoutStats.visibility = View.VISIBLE
-        binding.cardDetails.visibility = View.VISIBLE
+        binding.cardHistory.visibility = View.VISIBLE
 
         if (progress.total > 0) {
             binding.progressBar.isIndeterminate = false
@@ -228,39 +298,59 @@ class MainActivity : AppCompatActivity() {
             isSyncing = false
             binding.btnSync.text = "동기화 시작"
             binding.btnSync.setBackgroundColor(0xFF2E7D32.toInt())
+            stopLogRefresh()
             if (progress.errorMessage != null) {
                 binding.tvStatus.text = "오류: ${progress.errorMessage}"
             } else {
-                binding.tvStatus.text = "동기화 완료!"
             }
+            saveHistorySummary(progress)
+            loadHistorySummary()
             refreshDetailLists()
         } else {
             binding.tvStatus.text = "동기화 중..."
         }
     }
 
-    private fun updateUI() {
-        val gId = TokenManager.get(TokenManager.KEY_G_CLIENT_ID)
-        val gToken = TokenManager.get(TokenManager.KEY_G_ACCESS)
-        binding.tvGoogleClientId.text = if (!gId.isNullOrEmpty()) "Client ID: ${gId.take(20)}..." else "Client ID 미설정"
-        binding.tvGoogleStatus.text = if (!gToken.isNullOrEmpty()) "✅ Google 인증 완료" else "❌ Google 미인증"
-        binding.btnGoogleAuth.text = if (!gToken.isNullOrEmpty()) "Google 재인증" else "Google 로그인"
+    private fun saveHistorySummary(progress: SyncProgress) {
+        val prefs = getSharedPreferences("sync_history", MODE_PRIVATE)
+        val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
+        val now = fmt.format(Date())
+        val success = progress.done - progress.errors - progress.skipped
+        val entry = "$now | 성공:$success 스킵:${progress.skipped} 실패:${progress.errors} (전체:${progress.total})"
 
-        val msId = TokenManager.get(TokenManager.KEY_MS_CLIENT_ID)
-        val msToken = TokenManager.get(TokenManager.KEY_MS_ACCESS)
-        binding.tvMsClientId.text = if (!msId.isNullOrEmpty()) "Client ID: ${msId.take(20)}..." else "Client ID 미설정"
-        binding.tvMsStatus.text = if (!msToken.isNullOrEmpty()) "✅ Microsoft 인증 완료" else "❌ Microsoft 미인증"
-        binding.btnMsAuth.text = if (!msToken.isNullOrEmpty()) "Microsoft 재인증" else "Microsoft 로그인"
+        val history = prefs.getStringSet("entries", mutableSetOf())?.toMutableSet() ?: mutableSetOf()
+        history.add(entry)
+        prefs.edit().putStringSet("entries", history).putString("latest", entry).apply()
+    }
 
-        val bothAuthed = !gToken.isNullOrEmpty() && !msToken.isNullOrEmpty()
-        binding.btnSync.isEnabled = bothAuthed
+    private fun loadHistorySummary() {
+        val prefs = getSharedPreferences("sync_history", MODE_PRIVATE)
+        val history = prefs.getStringSet("entries", emptySet()) ?: emptySet()
+
+        if (history.isNotEmpty()) {
+            binding.cardHistory.visibility = View.VISIBLE
+            val sorted = history.sortedDescending()
+            binding.tvHistorySummary.text = sorted.take(5).joinToString("\n")
+        }
 
         val successCount = progressDb.getSuccessRecords().size
         val failedCount = progressDb.getFailedRecords().size
         if (successCount > 0 || failedCount > 0) {
-            binding.cardDetails.visibility = View.VISIBLE
-            refreshDetailLists()
+            binding.cardHistory.visibility = View.VISIBLE
         }
+    }
+
+    private fun updateUI() {
+        val gId = TokenManager.get(TokenManager.KEY_G_CLIENT_ID)
+        val gToken = TokenManager.get(TokenManager.KEY_G_ACCESS)
+
+        val msId = TokenManager.get(TokenManager.KEY_MS_CLIENT_ID)
+        val msToken = TokenManager.get(TokenManager.KEY_MS_ACCESS)
+
+        val bothAuthed = !gToken.isNullOrEmpty() && !msToken.isNullOrEmpty()
+        binding.btnSync.isEnabled = bothAuthed
+
+        loadHistorySummary()
     }
 
     private fun showGoogleSetupDialog() {
@@ -379,5 +469,10 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateUI()
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        stopLogRefresh()
     }
 }

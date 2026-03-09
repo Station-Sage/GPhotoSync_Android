@@ -19,6 +19,9 @@ class SyncForegroundService : Service() {
 
         var progressCallback: ((SyncProgress) -> Unit)? = null
         var retryItems: List<SyncRecord>? = null
+        var logCallback: ((String) -> Unit)? = null
+        var syncDateFrom: Long? = null
+        var syncDateTo: Long? = null
     }
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -159,7 +162,22 @@ class SyncForegroundService : Service() {
 
         logToFile("fullSync - picked items: ${allItems.size}")
 
-        val total = allItems.size
+        // Date range filter
+        val filteredItems = if (syncDateFrom != null || syncDateTo != null) {
+            allItems.filter { item ->
+                try {
+                    val fmt = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+                    val itemDate = fmt.parse(item.createdAt.take(10))?.time ?: 0L
+                    val fromOk = syncDateFrom == null || itemDate >= syncDateFrom!!
+                    val toOk = syncDateTo == null || itemDate <= syncDateTo!!
+                    fromOk && toOk
+                } catch (_: Exception) { true }
+            }
+        } else allItems
+        logToFile("Date filtered: ${filteredItems.size} / ${allItems.size}")
+        val allItemsFiltered = filteredItems
+
+        val total = allItemsFiltered.size
         var done = 0
         var errors = 0
         var skipped = 0
@@ -167,7 +185,7 @@ class SyncForegroundService : Service() {
         progressDb.setTotalCount(total)
         notifyProgress("동기화 시작 (${total}개)", done, total)
 
-        for (item in allItems) {
+        for (item in allItemsFiltered) {
             if (!scope.isActive) break
 
             if (item.id in synced) {

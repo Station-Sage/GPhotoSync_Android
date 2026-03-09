@@ -24,10 +24,19 @@ public final class ActivityMainBinding implements ViewBinding {
   private final ScrollView rootView;
 
   @NonNull
+  public final Button btnDateFrom;
+
+  @NonNull
+  public final Button btnDateTo;
+
+  @NonNull
   public final Button btnGoogleAuth;
 
   @NonNull
   public final Button btnGoogleSetup;
+
+  @NonNull
+  public final Button btnHideDetail;
 
   @NonNull
   public final Button btnMsAuth;
@@ -42,6 +51,9 @@ public final class ActivityMainBinding implements ViewBinding {
   public final Button btnRetryFailed;
 
   @NonNull
+  public final Button btnShowDetail;
+
+  @NonNull
   public final Button btnSync;
 
   @NonNull
@@ -54,6 +66,9 @@ public final class ActivityMainBinding implements ViewBinding {
   public final CardView cardDetails;
 
   @NonNull
+  public final CardView cardHistory;
+
+  @NonNull
   public final LinearLayout layoutFailed;
 
   @NonNull
@@ -64,6 +79,9 @@ public final class ActivityMainBinding implements ViewBinding {
 
   @NonNull
   public final ProgressBar progressBar;
+
+  @NonNull
+  public final TextView tvDateRange;
 
   @NonNull
   public final TextView tvDone;
@@ -82,6 +100,12 @@ public final class ActivityMainBinding implements ViewBinding {
 
   @NonNull
   public final TextView tvGoogleStatus;
+
+  @NonNull
+  public final TextView tvHistorySummary;
+
+  @NonNull
+  public final TextView tvLiveLog;
 
   @NonNull
   public final TextView tvMsClientId;
@@ -107,39 +131,51 @@ public final class ActivityMainBinding implements ViewBinding {
   @NonNull
   public final TextView tvTotal;
 
-  private ActivityMainBinding(@NonNull ScrollView rootView, @NonNull Button btnGoogleAuth,
-      @NonNull Button btnGoogleSetup, @NonNull Button btnMsAuth, @NonNull Button btnMsSetup,
-      @NonNull Button btnReset, @NonNull Button btnRetryFailed, @NonNull Button btnSync,
-      @NonNull Button btnTabFailed, @NonNull Button btnTabSuccess, @NonNull CardView cardDetails,
+  private ActivityMainBinding(@NonNull ScrollView rootView, @NonNull Button btnDateFrom,
+      @NonNull Button btnDateTo, @NonNull Button btnGoogleAuth, @NonNull Button btnGoogleSetup,
+      @NonNull Button btnHideDetail, @NonNull Button btnMsAuth, @NonNull Button btnMsSetup,
+      @NonNull Button btnReset, @NonNull Button btnRetryFailed, @NonNull Button btnShowDetail,
+      @NonNull Button btnSync, @NonNull Button btnTabFailed, @NonNull Button btnTabSuccess,
+      @NonNull CardView cardDetails, @NonNull CardView cardHistory,
       @NonNull LinearLayout layoutFailed, @NonNull LinearLayout layoutStats,
       @NonNull LinearLayout layoutSuccess, @NonNull ProgressBar progressBar,
-      @NonNull TextView tvDone, @NonNull TextView tvErrors, @NonNull TextView tvFailedCount,
-      @NonNull TextView tvFailedList, @NonNull TextView tvGoogleClientId,
-      @NonNull TextView tvGoogleStatus, @NonNull TextView tvMsClientId,
-      @NonNull TextView tvMsStatus, @NonNull TextView tvProgressPercent,
-      @NonNull TextView tvSkipped, @NonNull TextView tvStatus, @NonNull TextView tvSuccessCount,
-      @NonNull TextView tvSuccessList, @NonNull TextView tvTotal) {
+      @NonNull TextView tvDateRange, @NonNull TextView tvDone, @NonNull TextView tvErrors,
+      @NonNull TextView tvFailedCount, @NonNull TextView tvFailedList,
+      @NonNull TextView tvGoogleClientId, @NonNull TextView tvGoogleStatus,
+      @NonNull TextView tvHistorySummary, @NonNull TextView tvLiveLog,
+      @NonNull TextView tvMsClientId, @NonNull TextView tvMsStatus,
+      @NonNull TextView tvProgressPercent, @NonNull TextView tvSkipped, @NonNull TextView tvStatus,
+      @NonNull TextView tvSuccessCount, @NonNull TextView tvSuccessList,
+      @NonNull TextView tvTotal) {
     this.rootView = rootView;
+    this.btnDateFrom = btnDateFrom;
+    this.btnDateTo = btnDateTo;
     this.btnGoogleAuth = btnGoogleAuth;
     this.btnGoogleSetup = btnGoogleSetup;
+    this.btnHideDetail = btnHideDetail;
     this.btnMsAuth = btnMsAuth;
     this.btnMsSetup = btnMsSetup;
     this.btnReset = btnReset;
     this.btnRetryFailed = btnRetryFailed;
+    this.btnShowDetail = btnShowDetail;
     this.btnSync = btnSync;
     this.btnTabFailed = btnTabFailed;
     this.btnTabSuccess = btnTabSuccess;
     this.cardDetails = cardDetails;
+    this.cardHistory = cardHistory;
     this.layoutFailed = layoutFailed;
     this.layoutStats = layoutStats;
     this.layoutSuccess = layoutSuccess;
     this.progressBar = progressBar;
+    this.tvDateRange = tvDateRange;
     this.tvDone = tvDone;
     this.tvErrors = tvErrors;
     this.tvFailedCount = tvFailedCount;
     this.tvFailedList = tvFailedList;
     this.tvGoogleClientId = tvGoogleClientId;
     this.tvGoogleStatus = tvGoogleStatus;
+    this.tvHistorySummary = tvHistorySummary;
+    this.tvLiveLog = tvLiveLog;
     this.tvMsClientId = tvMsClientId;
     this.tvMsStatus = tvMsStatus;
     this.tvProgressPercent = tvProgressPercent;
@@ -177,6 +213,18 @@ public final class ActivityMainBinding implements ViewBinding {
     // This is done to optimize the compiled bytecode for size and performance.
     int id;
     missingId: {
+      id = R.id.btnDateFrom;
+      Button btnDateFrom = ViewBindings.findChildViewById(rootView, id);
+      if (btnDateFrom == null) {
+        break missingId;
+      }
+
+      id = R.id.btnDateTo;
+      Button btnDateTo = ViewBindings.findChildViewById(rootView, id);
+      if (btnDateTo == null) {
+        break missingId;
+      }
+
       id = R.id.btnGoogleAuth;
       Button btnGoogleAuth = ViewBindings.findChildViewById(rootView, id);
       if (btnGoogleAuth == null) {
@@ -186,6 +234,12 @@ public final class ActivityMainBinding implements ViewBinding {
       id = R.id.btnGoogleSetup;
       Button btnGoogleSetup = ViewBindings.findChildViewById(rootView, id);
       if (btnGoogleSetup == null) {
+        break missingId;
+      }
+
+      id = R.id.btnHideDetail;
+      Button btnHideDetail = ViewBindings.findChildViewById(rootView, id);
+      if (btnHideDetail == null) {
         break missingId;
       }
 
@@ -213,6 +267,12 @@ public final class ActivityMainBinding implements ViewBinding {
         break missingId;
       }
 
+      id = R.id.btnShowDetail;
+      Button btnShowDetail = ViewBindings.findChildViewById(rootView, id);
+      if (btnShowDetail == null) {
+        break missingId;
+      }
+
       id = R.id.btnSync;
       Button btnSync = ViewBindings.findChildViewById(rootView, id);
       if (btnSync == null) {
@@ -237,6 +297,12 @@ public final class ActivityMainBinding implements ViewBinding {
         break missingId;
       }
 
+      id = R.id.cardHistory;
+      CardView cardHistory = ViewBindings.findChildViewById(rootView, id);
+      if (cardHistory == null) {
+        break missingId;
+      }
+
       id = R.id.layoutFailed;
       LinearLayout layoutFailed = ViewBindings.findChildViewById(rootView, id);
       if (layoutFailed == null) {
@@ -258,6 +324,12 @@ public final class ActivityMainBinding implements ViewBinding {
       id = R.id.progressBar;
       ProgressBar progressBar = ViewBindings.findChildViewById(rootView, id);
       if (progressBar == null) {
+        break missingId;
+      }
+
+      id = R.id.tvDateRange;
+      TextView tvDateRange = ViewBindings.findChildViewById(rootView, id);
+      if (tvDateRange == null) {
         break missingId;
       }
 
@@ -294,6 +366,18 @@ public final class ActivityMainBinding implements ViewBinding {
       id = R.id.tvGoogleStatus;
       TextView tvGoogleStatus = ViewBindings.findChildViewById(rootView, id);
       if (tvGoogleStatus == null) {
+        break missingId;
+      }
+
+      id = R.id.tvHistorySummary;
+      TextView tvHistorySummary = ViewBindings.findChildViewById(rootView, id);
+      if (tvHistorySummary == null) {
+        break missingId;
+      }
+
+      id = R.id.tvLiveLog;
+      TextView tvLiveLog = ViewBindings.findChildViewById(rootView, id);
+      if (tvLiveLog == null) {
         break missingId;
       }
 
@@ -345,11 +429,13 @@ public final class ActivityMainBinding implements ViewBinding {
         break missingId;
       }
 
-      return new ActivityMainBinding((ScrollView) rootView, btnGoogleAuth, btnGoogleSetup,
-          btnMsAuth, btnMsSetup, btnReset, btnRetryFailed, btnSync, btnTabFailed, btnTabSuccess,
-          cardDetails, layoutFailed, layoutStats, layoutSuccess, progressBar, tvDone, tvErrors,
-          tvFailedCount, tvFailedList, tvGoogleClientId, tvGoogleStatus, tvMsClientId, tvMsStatus,
-          tvProgressPercent, tvSkipped, tvStatus, tvSuccessCount, tvSuccessList, tvTotal);
+      return new ActivityMainBinding((ScrollView) rootView, btnDateFrom, btnDateTo, btnGoogleAuth,
+          btnGoogleSetup, btnHideDetail, btnMsAuth, btnMsSetup, btnReset, btnRetryFailed,
+          btnShowDetail, btnSync, btnTabFailed, btnTabSuccess, cardDetails, cardHistory,
+          layoutFailed, layoutStats, layoutSuccess, progressBar, tvDateRange, tvDone, tvErrors,
+          tvFailedCount, tvFailedList, tvGoogleClientId, tvGoogleStatus, tvHistorySummary,
+          tvLiveLog, tvMsClientId, tvMsStatus, tvProgressPercent, tvSkipped, tvStatus,
+          tvSuccessCount, tvSuccessList, tvTotal);
     }
     String missingId = rootView.getResources().getResourceName(id);
     throw new NullPointerException("Missing required view with ID: ".concat(missingId));
