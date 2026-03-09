@@ -1,0 +1,10 @@
+[
+    {
+        "merged": "com.gphotosync.app-merged_res-43:/layout_activity_main.xml.flat",
+        "source": "com.gphotosync.app-main-45:/layout/activity_main.xml"
+    },
+    {
+        "merged": "com.gphotosync.app-merged_res-43:/layout_activity_oauth.xml.flat",
+        "source": "com.gphotosync.app-main-45:/layout/activity_oauth.xml"
+    }
+]
