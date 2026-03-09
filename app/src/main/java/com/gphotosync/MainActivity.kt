@@ -5,254 +5,308 @@ import android.view.View
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.widget.EditText
+import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.gphotosync.databinding.ActivityMainBinding
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private var syncRunning = false
+    private lateinit var progressDb: SyncProgressStore
+    private var isSyncing = false
 
     private val googleAuthLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            updateAuthStatus()
-            Toast.makeText(this, "Google 인증 완료!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Google 인증 성공!", Toast.LENGTH_SHORT).show()
         }
+        updateUI()
     }
 
     private val msAuthLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            updateAuthStatus()
-            Toast.makeText(this, "Microsoft 인증 완료!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Microsoft 인증 성공!", Toast.LENGTH_SHORT).show()
         }
+        updateUI()
     }
 
-    // JSON 파일 선택기
     private val jsonFilePicker = registerForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
-        uri?.let { loadOAuthJsonFile(it) }
+        uri?.let { parseGoogleJson(it) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        TokenManager.init(this)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        TokenManager.init(this)
-        updateAuthStatus()
+        progressDb = SyncProgressStore(this)
 
-        binding.btnGoogleSetup.setOnClickListener { showGoogleSetupDialog() }
-
-        binding.btnGoogleAuth.setOnClickListener {
-            if (TokenManager.get(TokenManager.KEY_G_CLIENT_ID).isNullOrEmpty()) {
-                Toast.makeText(this, "먼저 Google Client ID를 설정하세요", Toast.LENGTH_SHORT).show()
-            } else {
-                val intent = Intent(this, OAuthActivity::class.java).apply {
-                    putExtra(OAuthActivity.EXTRA_TYPE, "google")
-                }
-                googleAuthLauncher.launch(intent)
-            }
-        }
-
-        binding.btnMsSetup.setOnClickListener { showMsSetupDialog() }
-
-        binding.btnMsAuth.setOnClickListener {
-            if (TokenManager.get(TokenManager.KEY_MS_CLIENT_ID).isNullOrEmpty()) {
-                Toast.makeText(this, "먼저 Microsoft Client ID를 설정하세요", Toast.LENGTH_SHORT).show()
-            } else {
-                val intent = Intent(this, OAuthActivity::class.java).apply {
-                    putExtra(OAuthActivity.EXTRA_TYPE, "microsoft")
-                }
-                msAuthLauncher.launch(intent)
-            }
-        }
-
-        binding.btnSync.setOnClickListener {
-            if (!syncRunning) startSync() else stopSync()
-        }
-
-        binding.btnReset.setOnClickListener { showResetDialog() }
+        setupButtons()
+        updateUI()
+        setupDetailTabs()
 
         SyncForegroundService.progressCallback = { progress ->
             runOnUiThread { updateProgress(progress) }
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        updateAuthStatus()
-    }
-
-    private fun loadOAuthJsonFile(uri: Uri) {
-        try {
-            val inputStream = contentResolver.openInputStream(uri)
-            val jsonStr = inputStream?.bufferedReader()?.readText() ?: ""
-            inputStream?.close()
-
-            val root = JSONObject(jsonStr)
-
-            // Google Cloud Console에서 다운로드한 JSON 파싱
-            // 형식 1: {"installed": {"client_id": "...", "client_secret": "..."}}
-            // 형식 2: {"web": {"client_id": "...", "client_secret": "..."}}
-            val clientObj = when {
-                root.has("installed") -> root.getJSONObject("installed")
-                root.has("web") -> root.getJSONObject("web")
-                root.has("client_id") -> root  // 직접 포맷
-                else -> null
+    private fun setupButtons() {
+        binding.btnGoogleSetup.setOnClickListener { showGoogleSetupDialog() }
+        binding.btnGoogleAuth.setOnClickListener {
+            if (TokenManager.get(TokenManager.KEY_G_CLIENT_ID).isNullOrEmpty()) {
+                Toast.makeText(this, "먼저 API 설정을 하세요", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
             }
+            val intent = Intent(this, OAuthActivity::class.java)
+            intent.putExtra(OAuthActivity.EXTRA_TYPE, "google")
+            googleAuthLauncher.launch(intent)
+        }
 
-            if (clientObj != null && clientObj.has("client_id")) {
-                val clientId = clientObj.getString("client_id")
-                val clientSecret = clientObj.optString("client_secret", "")
+        binding.btnMsSetup.setOnClickListener { showMsSetupDialog() }
+        binding.btnMsAuth.setOnClickListener {
+            if (TokenManager.get(TokenManager.KEY_MS_CLIENT_ID).isNullOrEmpty()) {
+                Toast.makeText(this, "먼저 API 설정을 하세요", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val intent = Intent(this, OAuthActivity::class.java)
+            intent.putExtra(OAuthActivity.EXTRA_TYPE, "microsoft")
+            msAuthLauncher.launch(intent)
+        }
 
-                TokenManager.save(TokenManager.KEY_G_CLIENT_ID, clientId)
-                if (clientSecret.isNotEmpty()) {
-                    TokenManager.save(TokenManager.KEY_G_CLIENT_SECRET, clientSecret)
-                }
-
-                updateAuthStatus()
-                Toast.makeText(this, "JSON에서 설정 완료!\nClient ID: ${clientId.take(30)}...", Toast.LENGTH_LONG).show()
+        binding.btnSync.setOnClickListener {
+            if (isSyncing) {
+                val stopIntent = Intent(this, SyncForegroundService::class.java)
+                stopIntent.action = SyncForegroundService.ACTION_STOP
+                startService(stopIntent)
+                isSyncing = false
+                binding.btnSync.text = "동기화 시작"
+                binding.btnSync.setBackgroundColor(0xFF2E7D32.toInt())
             } else {
-                Toast.makeText(this, "JSON 파일에서 client_id를 찾을 수 없습니다", Toast.LENGTH_LONG).show()
+                startSync()
             }
-        } catch (e: Exception) {
-            Toast.makeText(this, "JSON 파싱 오류: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+
+        binding.btnReset.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("초기화")
+                .setMessage("모든 인증 정보와 동기화 기록을 삭제합니다.")
+                .setPositiveButton("확인") { _, _ ->
+                    TokenManager.clearAll()
+                    progressDb.reset()
+                    updateUI()
+                    Toast.makeText(this, "초기화 완료", Toast.LENGTH_SHORT).show()
+                }
+                .setNegativeButton("취소", null)
+                .show()
+        }
+
+        binding.btnRetryFailed.setOnClickListener { retryFailed() }
+    }
+
+    private fun setupDetailTabs() {
+        binding.btnTabSuccess.setOnClickListener {
+            binding.layoutSuccess.visibility = View.VISIBLE
+            binding.layoutFailed.visibility = View.GONE
+            binding.btnTabSuccess.setBackgroundColor(0xFF4CAF50.toInt())
+            binding.btnTabFailed.setBackgroundColor(0xFF9E9E9E.toInt())
+            refreshDetailLists()
+        }
+
+        binding.btnTabFailed.setOnClickListener {
+            binding.layoutSuccess.visibility = View.GONE
+            binding.layoutFailed.visibility = View.VISIBLE
+            binding.btnTabSuccess.setBackgroundColor(0xFF9E9E9E.toInt())
+            binding.btnTabFailed.setBackgroundColor(0xFFF44336.toInt())
+            refreshDetailLists()
         }
     }
 
-    private fun updateAuthStatus() {
-        val gAuth  = TokenManager.isGoogleAuthed()
-        val msAuth = TokenManager.isMicrosoftAuthed()
+    private fun refreshDetailLists() {
+        val successRecords = progressDb.getSuccessRecords()
+        val failedRecords = progressDb.getFailedRecords()
+        val dateFormat = SimpleDateFormat("MM/dd HH:mm", Locale.getDefault())
 
-        binding.tvGoogleStatus.text  = if (gAuth) "Google 인증 완료" else "Google 미인증"
-        binding.tvMsStatus.text      = if (msAuth) "Microsoft 인증 완료" else "Microsoft 미인증"
-
-        binding.btnGoogleAuth.text   = if (gAuth) "Google 재인증" else "Google 로그인"
-        binding.btnMsAuth.text       = if (msAuth) "Microsoft 재인증" else "Microsoft 로그인"
-
-        binding.btnSync.isEnabled    = gAuth && msAuth
-        binding.btnSync.alpha        = if (gAuth && msAuth) 1.0f else 0.5f
-
-        val gId = TokenManager.get(TokenManager.KEY_G_CLIENT_ID)
-        binding.tvGoogleClientId.text = if (!gId.isNullOrEmpty()) "Client ID: ${gId.take(20)}..." else "Client ID 미설정"
-
-        val msId = TokenManager.get(TokenManager.KEY_MS_CLIENT_ID)
-        binding.tvMsClientId.text = if (!msId.isNullOrEmpty()) "Client ID: ${msId.take(20)}..." else "Client ID 미설정"
-    }
-
-    private fun updateProgress(progress: SyncProgress) {
-        if (progress.errorMessage != null) {
-            binding.tvStatus.text = "오류: ${progress.errorMessage}"
-            syncRunning = false
-            binding.btnSync.text = "동기화 시작"
-            binding.progressBar.visibility = View.GONE
-            return
+        binding.tvSuccessCount.text = "완료: ${successRecords.size}건"
+        if (successRecords.isEmpty()) {
+            binding.tvSuccessList.text = "내역 없음"
+        } else {
+            binding.tvSuccessList.text = successRecords.take(100).joinToString("\n") { r ->
+                val time = dateFormat.format(Date(r.timestamp))
+                val size = if (r.fileSize > 0) formatSize(r.fileSize) else ""
+                "[$time] ${r.filename} $size"
+            }
         }
 
-        val pct = if (progress.total > 0) (progress.done * 100 / progress.total) else 0
-        binding.progressBar.progress = pct
-        binding.progressBar.max = 100
-        binding.tvStatus.text = "진행: ${progress.done}/${progress.total} (${pct}%)\n오류: ${progress.errors}개"
+        binding.tvFailedCount.text = "실패: ${failedRecords.size}건"
+        if (failedRecords.isEmpty()) {
+            binding.tvFailedList.text = "내역 없음"
+        } else {
+            binding.tvFailedList.text = failedRecords.joinToString("\n") { r ->
+                val time = dateFormat.format(Date(r.timestamp))
+                "[$time] ${r.filename}\n  → ${r.error}"
+            }
+        }
+    }
 
-        if (progress.finished) {
-            syncRunning = false
-            binding.btnSync.text = "동기화 시작"
-            binding.tvStatus.text = "완료! ${progress.done}개 성공, ${progress.errors}개 오류"
-            binding.progressBar.visibility = View.GONE
+    private fun formatSize(bytes: Long): String {
+        return when {
+            bytes >= 1024 * 1024 -> String.format("%.1fMB", bytes / 1024.0 / 1024.0)
+            bytes >= 1024 -> String.format("%.0fKB", bytes / 1024.0)
+            else -> "${bytes}B"
         }
     }
 
     private fun startSync() {
-        syncRunning = true
+        isSyncing = true
         binding.btnSync.text = "동기화 중단"
+        binding.btnSync.setBackgroundColor(0xFFF44336.toInt())
         binding.progressBar.visibility = View.VISIBLE
+        binding.tvProgressPercent.visibility = View.VISIBLE
+        binding.layoutStats.visibility = View.VISIBLE
+        binding.cardDetails.visibility = View.VISIBLE
         binding.progressBar.isIndeterminate = true
-        binding.tvStatus.text = "동기화 준비 중..."
 
-        val intent = Intent(this, SyncForegroundService::class.java).apply {
-            action = SyncForegroundService.ACTION_START
-        }
-        startForegroundService(intent)
-    }
-
-    private fun stopSync() {
-        syncRunning = false
-        binding.btnSync.text = "동기화 시작"
-        binding.tvStatus.text = "동기화 중단됨"
-        binding.progressBar.visibility = View.GONE
-
-        val intent = Intent(this, SyncForegroundService::class.java).apply {
-            action = SyncForegroundService.ACTION_STOP
-        }
+        val intent = Intent(this, SyncForegroundService::class.java)
+        intent.action = SyncForegroundService.ACTION_START
         startService(intent)
     }
 
+    private fun retryFailed() {
+        val failedRecords = progressDb.getFailedRecords()
+        if (failedRecords.isEmpty()) {
+            Toast.makeText(this, "재시도할 항목이 없습니다", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        isSyncing = true
+        binding.btnSync.text = "동기화 중단"
+        binding.btnSync.setBackgroundColor(0xFFF44336.toInt())
+        binding.progressBar.visibility = View.VISIBLE
+        binding.progressBar.isIndeterminate = true
+
+        SyncForegroundService.retryItems = failedRecords
+        val intent = Intent(this, SyncForegroundService::class.java)
+        intent.action = SyncForegroundService.ACTION_RETRY
+        startService(intent)
+    }
+
+    private fun updateProgress(progress: SyncProgress) {
+        binding.progressBar.visibility = View.VISIBLE
+        binding.tvProgressPercent.visibility = View.VISIBLE
+        binding.layoutStats.visibility = View.VISIBLE
+        binding.cardDetails.visibility = View.VISIBLE
+
+        if (progress.total > 0) {
+            binding.progressBar.isIndeterminate = false
+            binding.progressBar.max = progress.total
+            binding.progressBar.progress = progress.done
+            val pct = progress.done * 100 / progress.total
+            binding.tvProgressPercent.text = "${progress.done}/${progress.total} ($pct%)"
+        }
+
+        binding.tvTotal.text = "전체: ${progress.total}"
+        binding.tvDone.text = "완료: ${progress.done - progress.errors - progress.skipped}"
+        binding.tvSkipped.text = "스킵: ${progress.skipped}"
+        binding.tvErrors.text = "실패: ${progress.errors}"
+
+        if (progress.finished) {
+            isSyncing = false
+            binding.btnSync.text = "동기화 시작"
+            binding.btnSync.setBackgroundColor(0xFF2E7D32.toInt())
+            if (progress.errorMessage != null) {
+                binding.tvStatus.text = "오류: ${progress.errorMessage}"
+            } else {
+                binding.tvStatus.text = "동기화 완료!"
+            }
+            refreshDetailLists()
+        } else {
+            binding.tvStatus.text = "동기화 중..."
+        }
+    }
+
+    private fun updateUI() {
+        val gId = TokenManager.get(TokenManager.KEY_G_CLIENT_ID)
+        val gToken = TokenManager.get(TokenManager.KEY_G_ACCESS)
+        binding.tvGoogleClientId.text = if (!gId.isNullOrEmpty()) "Client ID: ${gId.take(20)}..." else "Client ID 미설정"
+        binding.tvGoogleStatus.text = if (!gToken.isNullOrEmpty()) "✅ Google 인증 완료" else "❌ Google 미인증"
+        binding.btnGoogleAuth.text = if (!gToken.isNullOrEmpty()) "Google 재인증" else "Google 로그인"
+
+        val msId = TokenManager.get(TokenManager.KEY_MS_CLIENT_ID)
+        val msToken = TokenManager.get(TokenManager.KEY_MS_ACCESS)
+        binding.tvMsClientId.text = if (!msId.isNullOrEmpty()) "Client ID: ${msId.take(20)}..." else "Client ID 미설정"
+        binding.tvMsStatus.text = if (!msToken.isNullOrEmpty()) "✅ Microsoft 인증 완료" else "❌ Microsoft 미인증"
+        binding.btnMsAuth.text = if (!msToken.isNullOrEmpty()) "Microsoft 재인증" else "Microsoft 로그인"
+
+        val bothAuthed = !gToken.isNullOrEmpty() && !msToken.isNullOrEmpty()
+        binding.btnSync.isEnabled = bothAuthed
+
+        val successCount = progressDb.getSuccessRecords().size
+        val failedCount = progressDb.getFailedRecords().size
+        if (successCount > 0 || failedCount > 0) {
+            binding.cardDetails.visibility = View.VISIBLE
+            refreshDetailLists()
+        }
+    }
+
     private fun showGoogleSetupDialog() {
-        val input = android.widget.EditText(this).apply {
-            hint = "Client ID (xxxxx.apps.googleusercontent.com)"
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 32, 48, 16)
+        }
+
+        val etId = EditText(this).apply {
+            hint = "Google Client ID"
             setText(TokenManager.get(TokenManager.KEY_G_CLIENT_ID) ?: "")
         }
-        val secretInput = android.widget.EditText(this).apply {
-            hint = "Client Secret (GOCSPX-xxxxx)"
+        val etSecret = EditText(this).apply {
+            hint = "Google Client Secret"
             setText(TokenManager.get(TokenManager.KEY_G_CLIENT_SECRET) ?: "")
         }
-        val layout = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(50, 20, 50, 10)
-            addView(android.widget.TextView(this@MainActivity).apply {
-                text = "방법 1: JSON 파일로 자동 설정\n(Google Cloud Console에서 다운로드한 OAuth JSON)\n\n방법 2: 수동 입력"
-                setPadding(0, 0, 0, 20)
-                textSize = 13f
-            })
 
-            // JSON 업로드 버튼
-            addView(android.widget.Button(this@MainActivity).apply {
-                text = "JSON 파일 업로드"
-                setOnClickListener {
-                    jsonFilePicker.launch("*/*")
-                }
-            })
-
-            addView(android.view.View(this@MainActivity).apply {
-                layoutParams = android.widget.LinearLayout.LayoutParams(
-                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 1
-                ).apply { topMargin = 16; bottomMargin = 16 }
-                setBackgroundColor(0xFFCCCCCC.toInt())
-            })
-
-            addView(android.widget.TextView(this@MainActivity).apply {
-                text = "또는 수동 입력:"
-                setPadding(0, 0, 0, 8)
-            })
-            addView(android.widget.TextView(this@MainActivity).apply { text = "Client ID:" })
-            addView(input)
-            addView(android.widget.TextView(this@MainActivity).apply {
-                text = "Client Secret:"
-                setPadding(0, 16, 0, 0)
-            })
-            addView(secretInput)
-        }
+        layout.addView(etId)
+        layout.addView(android.view.View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
+                .apply { topMargin = 16; bottomMargin = 16 }
+            setBackgroundColor(0xFFCCCCCC.toInt())
+        })
+        layout.addView(etSecret)
+        layout.addView(android.view.View(this).apply {
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 1)
+                .apply { topMargin = 16; bottomMargin = 16 }
+            setBackgroundColor(0xFFCCCCCC.toInt())
+        })
+        layout.addView(android.widget.Button(this).apply {
+            text = "📁 JSON 파일에서 가져오기"
+            setOnClickListener {
+                jsonFilePicker.launch("*/*")
+            }
+        })
 
         AlertDialog.Builder(this)
-            .setTitle("Google 설정")
+            .setTitle("Google API 설정")
             .setView(layout)
             .setPositiveButton("저장") { _, _ ->
-                val id  = input.text.toString().trim()
-                val sec = secretInput.text.toString().trim()
+                val id = etId.text.toString().trim()
+                val secret = etSecret.text.toString().trim()
                 if (id.isNotEmpty()) {
                     TokenManager.save(TokenManager.KEY_G_CLIENT_ID, id)
-                    TokenManager.save(TokenManager.KEY_G_CLIENT_SECRET, sec)
-                    updateAuthStatus()
-                    Toast.makeText(this, "저장됨", Toast.LENGTH_SHORT).show()
+                    if (secret.isNotEmpty()) TokenManager.save(TokenManager.KEY_G_CLIENT_SECRET, secret)
+                    updateUI()
+                    Toast.makeText(this, "저장 완료", Toast.LENGTH_SHORT).show()
                 }
             }
             .setNegativeButton("취소", null)
@@ -260,54 +314,69 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showMsSetupDialog() {
-        val input = android.widget.EditText(this).apply {
-            hint = "Application (Client) ID"
-            setText(TokenManager.get(TokenManager.KEY_MS_CLIENT_ID) ?: "")
-        }
-        val layout = android.widget.LinearLayout(this).apply {
-            orientation = android.widget.LinearLayout.VERTICAL
-            setPadding(50, 20, 50, 10)
-            addView(android.widget.TextView(this@MainActivity).apply {
-                text = "Azure Portal에서 앱 등록 후\nApplication (Client) ID를 입력하세요"
-                setPadding(0, 0, 0, 20)
-                textSize = 13f
-            })
-            addView(android.widget.TextView(this@MainActivity).apply { text = "Application (Client) ID:" })
-            addView(input)
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 32, 48, 16)
         }
 
+        val etId = EditText(this).apply {
+            hint = "Microsoft Client ID"
+            setText(TokenManager.get(TokenManager.KEY_MS_CLIENT_ID) ?: "")
+        }
+        layout.addView(etId)
+
         AlertDialog.Builder(this)
-            .setTitle("Microsoft 설정")
+            .setTitle("Microsoft API 설정")
             .setView(layout)
             .setPositiveButton("저장") { _, _ ->
-                val id = input.text.toString().trim()
+                val id = etId.text.toString().trim()
                 if (id.isNotEmpty()) {
                     TokenManager.save(TokenManager.KEY_MS_CLIENT_ID, id)
-                    updateAuthStatus()
-                    Toast.makeText(this, "저장됨", Toast.LENGTH_SHORT).show()
+                    updateUI()
+                    Toast.makeText(this, "저장 완료", Toast.LENGTH_SHORT).show()
                 }
             }
             .setNegativeButton("취소", null)
             .show()
     }
 
-    private fun showResetDialog() {
-        AlertDialog.Builder(this)
-            .setTitle("초기화")
-            .setMessage("저장된 모든 인증 정보와 동기화 진행 상황을 삭제할까요?")
-            .setPositiveButton("초기화") { _, _ ->
-                TokenManager.clearAll()
-                SyncProgressStore(this).reset()
-                updateAuthStatus()
-                binding.tvStatus.text = "초기화 완료"
-                Toast.makeText(this, "초기화 완료", Toast.LENGTH_SHORT).show()
+    private fun parseGoogleJson(uri: Uri) {
+        try {
+            val inputStream = contentResolver.openInputStream(uri)
+            val jsonStr = inputStream?.bufferedReader()?.readText() ?: return
+            val json = JSONObject(jsonStr)
+
+            var clientId = ""
+            var clientSecret = ""
+
+            if (json.has("installed")) {
+                val installed = json.getJSONObject("installed")
+                clientId = installed.optString("client_id", "")
+                clientSecret = installed.optString("client_secret", "")
+            } else if (json.has("web")) {
+                val web = json.getJSONObject("web")
+                clientId = web.optString("client_id", "")
+                clientSecret = web.optString("client_secret", "")
+            } else {
+                clientId = json.optString("client_id", "")
+                clientSecret = json.optString("client_secret", "")
             }
-            .setNegativeButton("취소", null)
-            .show()
+
+            if (clientId.isNotEmpty()) {
+                TokenManager.save(TokenManager.KEY_G_CLIENT_ID, clientId)
+                if (clientSecret.isNotEmpty()) TokenManager.save(TokenManager.KEY_G_CLIENT_SECRET, clientSecret)
+                updateUI()
+                Toast.makeText(this, "JSON에서 가져오기 완료", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "JSON에서 Client ID를 찾을 수 없습니다", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "JSON 파싱 오류: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        SyncForegroundService.progressCallback = null
+    override fun onResume() {
+        super.onResume()
+        updateUI()
     }
 }

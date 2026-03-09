@@ -12,7 +12,6 @@
         android:orientation="vertical"
         android:padding="24dp">
 
-        <!-- 타이틀 -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -32,172 +31,131 @@
             android:gravity="center"
             android:layout_marginBottom="24dp" />
 
-        <!-- ─────────────────────────────────── -->
         <!-- Google 섹션 -->
-        <!-- ─────────────────────────────────── -->
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
             app:cardCornerRadius="16dp"
             app:cardElevation="4dp">
-
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:padding="20dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🔴 Google Photos"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:textColor="#D32F2F"
-                    android:layout_marginBottom="8dp" />
-
-                <TextView
-                    android:id="@+id/tvGoogleClientId"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Client ID 미설정"
-                    android:textSize="12sp"
-                    android:textColor="#888"
-                    android:layout_marginBottom="4dp" />
-
-                <TextView
-                    android:id="@+id/tvGoogleStatus"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="❌ Google 미인증"
-                    android:textSize="14sp"
-                    android:layout_marginBottom="12dp" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="🔴 Google Photos" android:textSize="18sp" android:textStyle="bold"
+                    android:textColor="#D32F2F" android:layout_marginBottom="8dp" />
+                <TextView android:id="@+id/tvGoogleClientId" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:text="Client ID 미설정"
+                    android:textSize="12sp" android:textColor="#888" android:layout_marginBottom="4dp" />
+                <TextView android:id="@+id/tvGoogleStatus" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:text="❌ Google 미인증"
+                    android:textSize="14sp" android:layout_marginBottom="12dp" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="horizontal">
-
-                    <Button
-                        android:id="@+id/btnGoogleSetup"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="API 설정"
-                        android:layout_marginEnd="8dp"
+                    <Button android:id="@+id/btnGoogleSetup" android:layout_width="0dp"
+                        android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="API 설정" android:layout_marginEnd="8dp"
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
-
-                    <Button
-                        android:id="@+id/btnGoogleAuth"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="Google 로그인"
-                        android:backgroundTint="#D32F2F" />
+                    <Button android:id="@+id/btnGoogleAuth" android:layout_width="0dp"
+                        android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="Google 로그인" android:backgroundTint="#D32F2F" />
                 </LinearLayout>
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- ─────────────────────────────────── -->
         <!-- Microsoft 섹션 -->
-        <!-- ─────────────────────────────────── -->
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
             app:cardCornerRadius="16dp"
             app:cardElevation="4dp">
-
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:padding="20dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🔵 Microsoft OneDrive"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:textColor="#1565C0"
-                    android:layout_marginBottom="8dp" />
-
-                <TextView
-                    android:id="@+id/tvMsClientId"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="Client ID 미설정"
-                    android:textSize="12sp"
-                    android:textColor="#888"
-                    android:layout_marginBottom="4dp" />
-
-                <TextView
-                    android:id="@+id/tvMsStatus"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="❌ Microsoft 미인증"
-                    android:textSize="14sp"
-                    android:layout_marginBottom="12dp" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="🔵 Microsoft OneDrive" android:textSize="18sp" android:textStyle="bold"
+                    android:textColor="#1565C0" android:layout_marginBottom="8dp" />
+                <TextView android:id="@+id/tvMsClientId" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:text="Client ID 미설정"
+                    android:textSize="12sp" android:textColor="#888" android:layout_marginBottom="4dp" />
+                <TextView android:id="@+id/tvMsStatus" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:text="❌ Microsoft 미인증"
+                    android:textSize="14sp" android:layout_marginBottom="12dp" />
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
                     android:orientation="horizontal">
-
-                    <Button
-                        android:id="@+id/btnMsSetup"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="API 설정"
-                        android:layout_marginEnd="8dp"
+                    <Button android:id="@+id/btnMsSetup" android:layout_width="0dp"
+                        android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="API 설정" android:layout_marginEnd="8dp"
                         style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
-
-                    <Button
-                        android:id="@+id/btnMsAuth"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="Microsoft 로그인"
-                        android:backgroundTint="#1565C0" />
+                    <Button android:id="@+id/btnMsAuth" android:layout_width="0dp"
+                        android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="Microsoft 로그인" android:backgroundTint="#1565C0" />
                 </LinearLayout>
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- ─────────────────────────────────── -->
         <!-- 동기화 섹션 -->
-        <!-- ─────────────────────────────────── -->
         <androidx.cardview.widget.CardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="16dp"
             app:cardCornerRadius="16dp"
             app:cardElevation="4dp">
-
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
                 android:padding="20dp">
 
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="🔄 동기화"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:textColor="#2E7D32"
-                    android:layout_marginBottom="12dp" />
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="🔄 동기화" android:textSize="18sp" android:textStyle="bold"
+                    android:textColor="#2E7D32" android:layout_marginBottom="12dp" />
 
                 <ProgressBar
                     android:id="@+id/progressBar"
                     style="@style/Widget.AppCompat.ProgressBar.Horizontal"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginBottom="8dp"
+                    android:layout_marginBottom="4dp"
                     android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/tvProgressPercent"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="13sp"
+                    android:textColor="#333"
+                    android:gravity="end"
+                    android:visibility="gone"
+                    android:layout_marginBottom="8dp" />
+
+                <!-- 통계 -->
+                <LinearLayout
+                    android:id="@+id/layoutStats"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:visibility="gone"
+                    android:layout_marginBottom="8dp">
+                    <TextView android:id="@+id/tvTotal" android:layout_width="0dp"
+                        android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="전체: 0" android:textSize="12sp" android:gravity="center" />
+                    <TextView android:id="@+id/tvDone" android:layout_width="0dp"
+                        android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="완료: 0" android:textSize="12sp" android:textColor="#2E7D32" android:gravity="center" />
+                    <TextView android:id="@+id/tvSkipped" android:layout_width="0dp"
+                        android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="스킵: 0" android:textSize="12sp" android:textColor="#FF8F00" android:gravity="center" />
+                    <TextView android:id="@+id/tvErrors" android:layout_width="0dp"
+                        android:layout_height="wrap_content" android:layout_weight="1"
+                        android:text="실패: 0" android:textSize="12sp" android:textColor="#D32F2F" android:gravity="center" />
+                </LinearLayout>
 
                 <TextView
                     android:id="@+id/tvStatus"
@@ -216,11 +174,106 @@
                     android:textSize="16sp"
                     android:backgroundTint="#2E7D32"
                     android:enabled="false" />
-
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- 초기화 버튼 -->
+        <!-- 상세 내역 탭 -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardDetails"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            app:cardCornerRadius="16dp"
+            app:cardElevation="4dp"
+            android:visibility="gone">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="20dp">
+
+                <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                    android:text="📋 진행 상세" android:textSize="18sp" android:textStyle="bold"
+                    android:textColor="#37474F" android:layout_marginBottom="12dp" />
+
+                <!-- 탭 버튼 -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="8dp">
+                    <Button
+                        android:id="@+id/btnTabSuccess"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:text="✅ 완료"
+                        android:textSize="12sp"
+                        android:layout_marginEnd="4dp"
+                        android:backgroundTint="#4CAF50" />
+                    <Button
+                        android:id="@+id/btnTabFailed"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:text="❌ 실패"
+                        android:textSize="12sp"
+                        android:layout_marginStart="4dp"
+                        android:backgroundTint="#9E9E9E" />
+                </LinearLayout>
+
+                <!-- 완료 내역 -->
+                <LinearLayout
+                    android:id="@+id/layoutSuccess"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="visible">
+                    <TextView android:id="@+id/tvSuccessCount"
+                        android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:text="완료: 0건" android:textSize="12sp" android:textColor="#888"
+                        android:layout_marginBottom="4dp" />
+                    <ScrollView
+                        android:layout_width="match_parent"
+                        android:layout_height="200dp">
+                        <TextView android:id="@+id/tvSuccessList"
+                            android:layout_width="match_parent" android:layout_height="wrap_content"
+                            android:text="내역 없음" android:textSize="11sp" android:textColor="#555"
+                            android:fontFamily="monospace" />
+                    </ScrollView>
+                </LinearLayout>
+
+                <!-- 실패 내역 -->
+                <LinearLayout
+                    android:id="@+id/layoutFailed"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+                    <TextView android:id="@+id/tvFailedCount"
+                        android:layout_width="match_parent" android:layout_height="wrap_content"
+                        android:text="실패: 0건" android:textSize="12sp" android:textColor="#888"
+                        android:layout_marginBottom="4dp" />
+                    <ScrollView
+                        android:layout_width="match_parent"
+                        android:layout_height="200dp">
+                        <TextView android:id="@+id/tvFailedList"
+                            android:layout_width="match_parent" android:layout_height="wrap_content"
+                            android:text="내역 없음" android:textSize="11sp" android:textColor="#D32F2F"
+                            android:fontFamily="monospace" />
+                    </ScrollView>
+                    <Button
+                        android:id="@+id/btnRetryFailed"
+                        android:layout_width="match_parent"
+                        android:layout_height="44dp"
+                        android:text="🔄 실패 항목 재시도"
+                        android:textSize="13sp"
+                        android:backgroundTint="#FF5722"
+                        android:layout_marginTop="8dp" />
+                </LinearLayout>
+            </LinearLayout>
+        </androidx.cardview.widget.CardView>
+
         <Button
             android:id="@+id/btnReset"
             android:layout_width="match_parent"
@@ -229,7 +282,6 @@
             android:textColor="#F44336"
             style="@style/Widget.MaterialComponents.Button.TextButton" />
 
-        <!-- 저장 경로 안내 -->
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -238,6 +290,5 @@
             android:textColor="#999"
             android:gravity="center"
             android:layout_marginTop="8dp" />
-
     </LinearLayout>
 </ScrollView>
