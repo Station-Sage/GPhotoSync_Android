@@ -1,22 +1,17 @@
 package com.gphotosync
 
 import android.app.Activity
-import android.content.Intent
-import android.os.Bundle
 import android.view.View
+import android.content.Intent
+import android.net.Uri
+import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.gphotosync.databinding.ActivityMainBinding
+import org.json.JSONObject
 
-/**
- * 메인 화면
- * - Google / Microsoft 인증 상태 표시
- * - API 키 설정
- * - 동기화 시작/중단
- * - 실시간 진행 표시
- */
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
@@ -27,7 +22,7 @@ class MainActivity : AppCompatActivity() {
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             updateAuthStatus()
-            Toast.makeText(this, "✅ Google 인증 완료!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Google 인증 완료!", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -36,8 +31,15 @@ class MainActivity : AppCompatActivity() {
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             updateAuthStatus()
-            Toast.makeText(this, "✅ Microsoft 인증 완료!", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Microsoft 인증 완료!", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    // JSON 파일 선택기
+    private val jsonFilePicker = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { loadOAuthJsonFile(it) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -48,15 +50,11 @@ class MainActivity : AppCompatActivity() {
         TokenManager.init(this)
         updateAuthStatus()
 
-        // ── 버튼 이벤트 ──────────────────────────────
-
-        // Google 설정 버튼
         binding.btnGoogleSetup.setOnClickListener { showGoogleSetupDialog() }
 
-        // Google 인증 버튼
         binding.btnGoogleAuth.setOnClickListener {
             if (TokenManager.get(TokenManager.KEY_G_CLIENT_ID).isNullOrEmpty()) {
-                Toast.makeText(this, "먼저 Google Client ID를 입력하세요", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "먼저 Google Client ID를 설정하세요", Toast.LENGTH_SHORT).show()
             } else {
                 val intent = Intent(this, OAuthActivity::class.java).apply {
                     putExtra(OAuthActivity.EXTRA_TYPE, "google")
@@ -65,13 +63,11 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // Microsoft 설정 버튼
         binding.btnMsSetup.setOnClickListener { showMsSetupDialog() }
 
-        // Microsoft 인증 버튼
         binding.btnMsAuth.setOnClickListener {
             if (TokenManager.get(TokenManager.KEY_MS_CLIENT_ID).isNullOrEmpty()) {
-                Toast.makeText(this, "먼저 Microsoft Client ID를 입력하세요", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "먼저 Microsoft Client ID를 설정하세요", Toast.LENGTH_SHORT).show()
             } else {
                 val intent = Intent(this, OAuthActivity::class.java).apply {
                     putExtra(OAuthActivity.EXTRA_TYPE, "microsoft")
@@ -80,15 +76,12 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        // 동기화 시작/중단 버튼
         binding.btnSync.setOnClickListener {
             if (!syncRunning) startSync() else stopSync()
         }
 
-        // 초기화 버튼
         binding.btnReset.setOnClickListener { showResetDialog() }
 
-        // 실시간 진행 콜백 등록
         SyncForegroundService.progressCallback = { progress ->
             runOnUiThread { updateProgress(progress) }
         }
@@ -99,12 +92,49 @@ class MainActivity : AppCompatActivity() {
         updateAuthStatus()
     }
 
+    private fun loadOAuthJsonFile(uri: Uri) {
+        try {
+            val inputStream = contentResolver.openInputStream(uri)
+            val jsonStr = inputStream?.bufferedReader()?.readText() ?: ""
+            inputStream?.close()
+
+            val root = JSONObject(jsonStr)
+
+            // Google Cloud Console에서 다운로드한 JSON 파싱
+            // 형식 1: {"installed": {"client_id": "...", "client_secret": "..."}}
+            // 형식 2: {"web": {"client_id": "...", "client_secret": "..."}}
+            val clientObj = when {
+                root.has("installed") -> root.getJSONObject("installed")
+                root.has("web") -> root.getJSONObject("web")
+                root.has("client_id") -> root  // 직접 포맷
+                else -> null
+            }
+
+            if (clientObj != null && clientObj.has("client_id")) {
+                val clientId = clientObj.getString("client_id")
+                val clientSecret = clientObj.optString("client_secret", "")
+
+                TokenManager.save(TokenManager.KEY_G_CLIENT_ID, clientId)
+                if (clientSecret.isNotEmpty()) {
+                    TokenManager.save(TokenManager.KEY_G_CLIENT_SECRET, clientSecret)
+                }
+
+                updateAuthStatus()
+                Toast.makeText(this, "JSON에서 설정 완료!\nClient ID: ${clientId.take(30)}...", Toast.LENGTH_LONG).show()
+            } else {
+                Toast.makeText(this, "JSON 파일에서 client_id를 찾을 수 없습니다", Toast.LENGTH_LONG).show()
+            }
+        } catch (e: Exception) {
+            Toast.makeText(this, "JSON 파싱 오류: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
     private fun updateAuthStatus() {
         val gAuth  = TokenManager.isGoogleAuthed()
         val msAuth = TokenManager.isMicrosoftAuthed()
 
-        binding.tvGoogleStatus.text  = if (gAuth) "✅ Google 인증 완료" else "❌ Google 미인증"
-        binding.tvMsStatus.text      = if (msAuth) "✅ Microsoft 인증 완료" else "❌ Microsoft 미인증"
+        binding.tvGoogleStatus.text  = if (gAuth) "Google 인증 완료" else "Google 미인증"
+        binding.tvMsStatus.text      = if (msAuth) "Microsoft 인증 완료" else "Microsoft 미인증"
 
         binding.btnGoogleAuth.text   = if (gAuth) "Google 재인증" else "Google 로그인"
         binding.btnMsAuth.text       = if (msAuth) "Microsoft 재인증" else "Microsoft 로그인"
@@ -112,7 +142,6 @@ class MainActivity : AppCompatActivity() {
         binding.btnSync.isEnabled    = gAuth && msAuth
         binding.btnSync.alpha        = if (gAuth && msAuth) 1.0f else 0.5f
 
-        // Google 클라이언트 ID 힌트
         val gId = TokenManager.get(TokenManager.KEY_G_CLIENT_ID)
         binding.tvGoogleClientId.text = if (!gId.isNullOrEmpty()) "Client ID: ${gId.take(20)}..." else "Client ID 미설정"
 
@@ -132,12 +161,12 @@ class MainActivity : AppCompatActivity() {
         val pct = if (progress.total > 0) (progress.done * 100 / progress.total) else 0
         binding.progressBar.progress = pct
         binding.progressBar.max = 100
-        binding.tvStatus.text = "진행: ${progress.done}/${progress.total} ($pct%)\n오류: ${progress.errors}개"
+        binding.tvStatus.text = "진행: ${progress.done}/${progress.total} (${pct}%)\n오류: ${progress.errors}개"
 
         if (progress.finished) {
             syncRunning = false
             binding.btnSync.text = "동기화 시작"
-            binding.tvStatus.text = "✅ 완료! ${progress.done}개 성공, ${progress.errors}개 오류"
+            binding.tvStatus.text = "완료! ${progress.done}개 성공, ${progress.errors}개 오류"
             binding.progressBar.visibility = View.GONE
         }
     }
@@ -158,7 +187,7 @@ class MainActivity : AppCompatActivity() {
     private fun stopSync() {
         syncRunning = false
         binding.btnSync.text = "동기화 시작"
-        binding.tvStatus.text = "동기화 중단됨 (진행 상황 저장됨)"
+        binding.tvStatus.text = "동기화 중단됨"
         binding.progressBar.visibility = View.GONE
 
         val intent = Intent(this, SyncForegroundService::class.java).apply {
@@ -169,19 +198,40 @@ class MainActivity : AppCompatActivity() {
 
     private fun showGoogleSetupDialog() {
         val input = android.widget.EditText(this).apply {
-            hint = "Google Client ID (xxxxx.apps.googleusercontent.com)"
+            hint = "Client ID (xxxxx.apps.googleusercontent.com)"
             setText(TokenManager.get(TokenManager.KEY_G_CLIENT_ID) ?: "")
         }
         val secretInput = android.widget.EditText(this).apply {
-            hint = "Google Client Secret (GOCSPX-xxxxx)"
+            hint = "Client Secret (GOCSPX-xxxxx)"
             setText(TokenManager.get(TokenManager.KEY_G_CLIENT_SECRET) ?: "")
         }
         val layout = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.VERTICAL
             setPadding(50, 20, 50, 10)
             addView(android.widget.TextView(this@MainActivity).apply {
-                text = "🔑 Google Cloud Console\nhttps://console.cloud.google.com\n\n• Photos Library API 활성화\n• OAuth 2.0 클라이언트 ID 생성 (데스크톱 앱)\n• 리디렉션 URI: gphotosync://oauth/callback"
+                text = "방법 1: JSON 파일로 자동 설정\n(Google Cloud Console에서 다운로드한 OAuth JSON)\n\n방법 2: 수동 입력"
                 setPadding(0, 0, 0, 20)
+                textSize = 13f
+            })
+
+            // JSON 업로드 버튼
+            addView(android.widget.Button(this@MainActivity).apply {
+                text = "JSON 파일 업로드"
+                setOnClickListener {
+                    jsonFilePicker.launch("application/json")
+                }
+            })
+
+            addView(android.view.View(this@MainActivity).apply {
+                layoutParams = android.widget.LinearLayout.LayoutParams(
+                    android.widget.LinearLayout.LayoutParams.MATCH_PARENT, 1
+                ).apply { topMargin = 16; bottomMargin = 16 }
+                setBackgroundColor(0xFFCCCCCC.toInt())
+            })
+
+            addView(android.widget.TextView(this@MainActivity).apply {
+                text = "또는 수동 입력:"
+                setPadding(0, 0, 0, 8)
             })
             addView(android.widget.TextView(this@MainActivity).apply { text = "Client ID:" })
             addView(input)
@@ -211,15 +261,16 @@ class MainActivity : AppCompatActivity() {
 
     private fun showMsSetupDialog() {
         val input = android.widget.EditText(this).apply {
-            hint = "Microsoft Application (Client) ID (xxxxxxxx-xxxx-xxxx-...)"
+            hint = "Application (Client) ID"
             setText(TokenManager.get(TokenManager.KEY_MS_CLIENT_ID) ?: "")
         }
         val layout = android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.VERTICAL
             setPadding(50, 20, 50, 10)
             addView(android.widget.TextView(this@MainActivity).apply {
-                text = "🔑 Azure Portal\nhttps://portal.azure.com\n\n• 앱 등록 → 새 등록\n• 개인 Microsoft 계정 포함 선택\n• 리디렉션 URI: gphotosync://oauth/callback\n• Files.ReadWrite, offline_access 권한 추가"
+                text = "Azure Portal에서 앱 등록 후\nApplication (Client) ID를 입력하세요"
                 setPadding(0, 0, 0, 20)
+                textSize = 13f
             })
             addView(android.widget.TextView(this@MainActivity).apply { text = "Application (Client) ID:" })
             addView(input)

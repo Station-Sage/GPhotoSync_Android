@@ -14,9 +14,8 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.GPhotoSync"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="true">
 
-        <!-- 메인 화면 -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -27,13 +26,18 @@
             </intent-filter>
         </activity>
 
-        <!-- OAuth WebView 화면 -->
         <activity
             android:name=".OAuthActivity"
-            android:exported="false"
-            android:screenOrientation="portrait" />
+            android:exported="true"
+            android:screenOrientation="portrait">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="gphotosync" android:host="oauth" />
+            </intent-filter>
+        </activity>
 
-        <!-- OAuth 딥링크 콜백 처리 -->
         <activity
             android:name=".OAuthCallbackActivity"
             android:exported="true"
@@ -46,7 +50,6 @@
             </intent-filter>
         </activity>
 
-        <!-- 백그라운드 동기화 포어그라운드 서비스 -->
         <service
             android:name=".SyncForegroundService"
             android:exported="false"
