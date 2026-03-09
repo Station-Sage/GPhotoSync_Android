@@ -100,7 +100,6 @@ object TokenManager {
             .add("client_secret", clientSecret)
             .add("refresh_token", refresh)
             .add("grant_type", "refresh_token")
-            .add("client_secret", "qtyfaBBYA403=unZUP40~_#")
             .build()
 
         client.newCall(Request.Builder()
