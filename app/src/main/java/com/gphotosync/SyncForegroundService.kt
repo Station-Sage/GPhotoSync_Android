@@ -183,6 +183,7 @@ class SyncForegroundService : Service() {
 
             if (fileData == null) {
                 errors++; done++
+                logToFile("DOWNLOAD FAILED: ${item.filename}")
                 progressDb.addFailedRecord(SyncRecord(item.id, item.filename, "failed", "다운로드 실패", fileSize = 0))
                 progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped))
                 continue
@@ -199,7 +200,9 @@ class SyncForegroundService : Service() {
             val folderPath = "${oneDriveApi.rootFolder}/${item.yearMonth}"
             var uploadDone = false
             var uploadOk = false
+            logToFile("[SYNC] ensureFolder calling: $folderPath")
             oneDriveApi.ensureFolder(folderPath) { folderOk ->
+                logToFile("[SYNC] ensureFolder result: $folderOk")
                 if (folderOk) {
                     oneDriveApi.uploadFile(fileData!!, item.filename, folderPath) { ok ->
                         uploadOk = ok; uploadDone = true
@@ -214,12 +217,14 @@ class SyncForegroundService : Service() {
                 progressDb.saveSyncedFileSize(item.id, fileData!!.size.toLong())
                 progressDb.addSuccessRecord(SyncRecord(item.id, item.filename, "success", fileSize = fileData!!.size.toLong()))
                 progressDb.removeFailedRecord(item.id)
+                logToFile("UPLOAD OK: ${item.filename}")
                 done++
                 val pct = if (total > 0) (done * 100 / total) else 0
                 notifyProgress("동기화 중 ($pct%) - ${item.filename}", done, total)
                 progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped))
             } else {
                 errors++; done++
+                logToFile("UPLOAD FAILED: ${item.filename}")
                 progressDb.addFailedRecord(SyncRecord(item.id, item.filename, "failed", "업로드 실패", fileSize = fileData?.size?.toLong() ?: 0))
                 progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped))
             }
@@ -269,7 +274,9 @@ class SyncForegroundService : Service() {
             val folderPath = "${oneDriveApi.rootFolder}/$yearMonth"
             var uploadDone = false
             var uploadOk = false
+            logToFile("[SYNC] ensureFolder calling: $folderPath")
             oneDriveApi.ensureFolder(folderPath) { folderOk ->
+                logToFile("[SYNC] ensureFolder result: $folderOk")
                 if (folderOk) {
                     oneDriveApi.uploadFile(fileData!!, record.filename, folderPath) { ok ->
                         uploadOk = ok

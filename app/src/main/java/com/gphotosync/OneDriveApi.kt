@@ -13,6 +13,13 @@ import java.net.URLEncoder
  */
 class OneDriveApi(private val context: Context) {
 
+    private fun logToFile(msg: String) {
+        try {
+            val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "sync_log.txt")
+            f.appendText(msg + "\n")
+        } catch (_: Exception) {}
+    }
+
     private val client = OkHttpClient.Builder().build()
     private val GRAPH  = "https://graph.microsoft.com/v1.0"
     private val ROOT_FOLDER = "Pictures/GooglePhotos"
@@ -22,7 +29,7 @@ class OneDriveApi(private val context: Context) {
      */
     fun ensureFolder(path: String, callback: (Boolean) -> Unit) {
         TokenManager.getValidMicrosoftToken(client) { token ->
-            if (token == null) { callback(false); return@getValidMicrosoftToken }
+            if (token == null) { logToFile("[OD] ensureFolder token NULL"); callback(false); return@getValidMicrosoftToken }
             val parts = path.trim('/').split("/")
             createFolderChain(token, parts, 0, callback)
         }
@@ -37,7 +44,7 @@ class OneDriveApi(private val context: Context) {
         val body = JSONObject().apply {
             put("name", name)
             put("folder", JSONObject())
-            put("@microsoft.graph.conflictBehavior", "ignore")
+            put("@microsoft.graph.conflictBehavior", "replace")
         }.toString().toRequestBody("application/json".toMediaType())
 
         val req = Request.Builder()
@@ -47,8 +54,9 @@ class OneDriveApi(private val context: Context) {
             .build()
 
         client.newCall(req).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) = callback(false)
+            override fun onFailure(call: Call, e: IOException) { logToFile("[OD] folder onFailure: ${e.message}"); callback(false) }
             override fun onResponse(call: Call, response: Response) {
+                logToFile("[OD] folder resp=${response.code} ${response.body?.string()?.take(300)}")
                 if (response.code in 200..201 || response.code == 409) {
                     createFolderChain(token, parts, idx + 1, callback)
                 } else {
@@ -93,8 +101,8 @@ class OneDriveApi(private val context: Context) {
             .build()
 
         client.newCall(req).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) = callback(false)
-            override fun onResponse(call: Call, response: Response) = callback(response.code in 200..201)
+            override fun onFailure(call: Call, e: IOException) { logToFile("[OD] upload onFailure: ${e.message}"); callback(false) }
+            override fun onResponse(call: Call, response: Response) { logToFile("[OD] upload resp=${response.code} ${response.body?.string()?.take(200)}"); callback(response.code in 200..201) }
         })
     }
 
@@ -113,7 +121,7 @@ class OneDriveApi(private val context: Context) {
             .build()
 
         client.newCall(sessionReq).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) = callback(false)
+            override fun onFailure(call: Call, e: IOException) { logToFile("[OD] chunked onFailure: ${e.message}"); callback(false) }
             override fun onResponse(call: Call, response: Response) {
                 if (!response.isSuccessful) { callback(false); return }
                 val uploadUrl = JSONObject(response.body?.string() ?: "{}").optString("uploadUrl", "")
@@ -140,7 +148,7 @@ class OneDriveApi(private val context: Context) {
                 .build()
 
             OkHttpClient().newCall(req).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) = callback(false)
+                override fun onFailure(call: Call, e: IOException) { logToFile("[OD] chunked onFailure: ${e.message}"); callback(false) }
                 override fun onResponse(call: Call, response: Response) {
                     if (response.code in listOf(200, 201, 202)) {
                         offset = end

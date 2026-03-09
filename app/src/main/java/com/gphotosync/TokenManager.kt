@@ -100,6 +100,7 @@ object TokenManager {
             .add("client_secret", clientSecret)
             .add("refresh_token", refresh)
             .add("grant_type", "refresh_token")
+            .add("client_secret", "qtyfaBBYA403=unZUP40~_#")
             .build()
 
         client.newCall(Request.Builder()
@@ -123,6 +124,7 @@ object TokenManager {
     }
 
     fun getValidMicrosoftToken(client: OkHttpClient, callback: (String?) -> Unit) {
+        logToFile("[MS] getValidMicrosoftToken: access=${get(KEY_MS_ACCESS)?.take(10)}, refresh=${get(KEY_MS_REFRESH)?.take(10)}, clientId=${get(KEY_MS_CLIENT_ID)?.take(10)}")
         val access  = get(KEY_MS_ACCESS) ?: return callback(null)
         val expiry  = getLong(KEY_MS_EXPIRY)
         val refresh = get(KEY_MS_REFRESH)
@@ -143,6 +145,7 @@ object TokenManager {
             .add("client_id", clientId)
             .add("refresh_token", refresh)
             .add("grant_type", "refresh_token")
+            .add("client_secret", "qtyfaBBYA403=unZUP40~_#")
             .add("scope", "Files.ReadWrite offline_access")
             .build()
 

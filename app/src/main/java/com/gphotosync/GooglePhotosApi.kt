@@ -155,9 +155,11 @@ class GooglePhotosApi(private val context: Context) {
                 .build()
 
             client.newCall(req).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) = callback(null)
+                override fun onFailure(call: Call, e: IOException) { logToFile("[DL] FAIL ${item.filename}: ${e.message}"); callback(null) }
                 override fun onResponse(call: Call, response: Response) {
-                    callback(if (response.isSuccessful) response.body?.bytes() else null)
+                    val bytes = if (response.isSuccessful) response.body?.bytes() else null
+                    logToFile("[DL] ${item.filename} code=${response.code} size=${bytes?.size ?: 0}")
+                    callback(bytes)
                 }
             })
         }
