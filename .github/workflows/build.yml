@@ -1,0 +1,50 @@
+name: Build GPhotoSync APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:   # 수동 실행 허용
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 코드 체크아웃
+        uses: actions/checkout@v4
+
+      - name: ☕ JDK 17 설정
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: 🐘 Gradle 캐시
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: gradle-
+
+      - name: 🔧 Gradle 실행 권한
+        run: chmod +x gradlew
+
+      - name: 🏗️ Debug APK 빌드
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: 📦 APK 업로드 (Artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: GPhotoSync-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      - name: ✅ 빌드 완료 정보 출력
+        run: |
+          echo "================================================"
+          echo "✅ APK 빌드 완료!"
+          echo "위의 Artifacts 탭에서 GPhotoSync-debug-apk 다운로드"
+          echo "================================================"
+          ls -lh app/build/outputs/apk/debug/
