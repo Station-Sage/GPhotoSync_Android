@@ -1,4 +1,5 @@
 package com.gphotosync
+import android.util.Log
 
 import android.app.*
 import android.content.Intent
@@ -25,6 +26,13 @@ class SyncForegroundService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    private fun logToFile(msg: String) {
+        try {
+            val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "sync_log.txt")
+            f.appendText("${java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())} $msg\n")
+        } catch (_: Exception) {}
+    }
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
@@ -33,7 +41,9 @@ class SyncForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_START -> {
+                logToFile("onStartCommand ACTION_START received")
                 startForeground(NOTIF_ID, buildNotification("동기화 준비 중...", 0, 0))
+                logToFile("About to call startSync")
                 startSync(false)
             }
             ACTION_RETRY -> {
@@ -49,6 +59,7 @@ class SyncForegroundService : Service() {
     }
 
     private fun startSync(isRetry: Boolean) {
+        logToFile("startSync called, isRetry=$isRetry")
         val googleApi   = GooglePhotosApi(this)
         val oneDriveApi = OneDriveApi(this)
         val progressDb  = SyncProgressStore(this)
@@ -56,6 +67,7 @@ class SyncForegroundService : Service() {
         syncJob = scope.launch {
             try {
                 val synced = progressDb.loadSyncedIds().toMutableSet()
+                    logToFile("synced ids loaded: ${synced.size}")
 
                 if (isRetry) {
                     val failedItems = retryItems ?: progressDb.getFailedRecords()
@@ -67,6 +79,7 @@ class SyncForegroundService : Service() {
                     }
                     retrySync(googleApi, oneDriveApi, progressDb, failedItems, synced)
                 } else {
+                        logToFile("calling fullSync")
                     fullSync(googleApi, oneDriveApi, progressDb, synced)
                 }
 
@@ -75,10 +88,12 @@ class SyncForegroundService : Service() {
                     stopSelf()
                 }
             } catch (e: CancellationException) {
+                logToFile("CancellationException: ${e.message}")
                 notifyProgress("동기화 중단됨", 0, 0)
                 stopForeground(STOP_FOREGROUND_DETACH)
                 stopSelf()
             } catch (e: Exception) {
+                logToFile("Exception in startSync: ${e.message}")
                 progressCallback?.invoke(SyncProgress(0, 0, 0, false, e.message, 0))
                 notifyProgress("오류 발생: ${e.message}", 0, 0)
                 stopForeground(STOP_FOREGROUND_DETACH)
@@ -93,19 +108,59 @@ class SyncForegroundService : Service() {
         progressDb: SyncProgressStore,
         synced: MutableSet<String>
     ) {
-        notifyProgress("미디어 목록 수집 중...", 0, 0)
+        logToFile("fullSync - creating picker session")
+        notifyProgress("Picker 세션 생성 중...", 0, 0)
 
-        val allItems = mutableListOf<MediaItem>()
+        var sessionId: String? = null
+        var pickerUri: String? = null
+        var sessionDone = false
+        googleApi.createSession { sid, uri ->
+            sessionId = sid; pickerUri = uri; sessionDone = true
+        }
+        while (!sessionDone && scope.isActive) delay(200)
+
+        if (sessionId == null || pickerUri == null) {
+            logToFile("fullSync - session creation failed")
+            notifyProgress("세션 생성 실패", 0, 0)
+            progressCallback?.invoke(SyncProgress(0, 0, 0, true, "세션 생성 실패", 0))
+            return
+        }
+
+        logToFile("fullSync - session=$sessionId pickerUri=$pickerUri")
+
+        withContext(Dispatchers.Main) {
+            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(pickerUri))
+            intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            applicationContext.startActivity(intent)
+        }
+        notifyProgress("Google Photos에서 사진을 선택하세요...", 0, 0)
+
+        var mediaReady = false
+        while (!mediaReady && scope.isActive) {
+            delay(3000)
+            var pollDone = false
+            googleApi.pollSession(sessionId!!) { ready ->
+                mediaReady = ready; pollDone = true
+            }
+            while (!pollDone && scope.isActive) delay(200)
+            logToFile("fullSync - polling, mediaReady=$mediaReady")
+        }
+
+        if (!scope.isActive) return
+
+        notifyProgress("선택된 사진 목록 가져오는 중...", 0, 0)
+        var allItems: List<MediaItem> = emptyList()
         var listDone = false
-        googleApi.listAllMedia(
-            onPage  = { items, count -> allItems.addAll(items); notifyProgress("목록 수집 중... ${count}개", 0, count) },
-            onDone  = { _ -> listDone = true },
-            onError = { err -> notifyProgress("오류: $err", 0, 0) }
+        googleApi.listPickedMedia(sessionId!!,
+            onDone = { items -> allItems = items; listDone = true },
+            onError = { err -> logToFile("listPickedMedia error: $err"); listDone = true }
         )
         while (!listDone && scope.isActive) delay(200)
 
+        logToFile("fullSync - picked items: ${allItems.size}")
+
         val total = allItems.size
-        var done  = 0
+        var done = 0
         var errors = 0
         var skipped = 0
 
@@ -115,53 +170,41 @@ class SyncForegroundService : Service() {
         for (item in allItems) {
             if (!scope.isActive) break
 
-            // 이미 동기화된 항목 체크
             if (item.id in synced) {
-                done++
-                skipped++
-                val pct = if (total > 0) (done * 100 / total) else 0
+                done++; skipped++
                 progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped))
                 continue
             }
 
-            // Google Photos 다운로드
             var fileData: ByteArray? = null
             var dlDone = false
             googleApi.downloadMedia(item) { data -> fileData = data; dlDone = true }
             while (!dlDone && scope.isActive) delay(100)
 
             if (fileData == null) {
-                errors++
+                errors++; done++
                 progressDb.addFailedRecord(SyncRecord(item.id, item.filename, "failed", "다운로드 실패", fileSize = 0))
-                done++
                 progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped))
                 continue
             }
 
-            // 파일 크기가 동일하면 스킵 (이전에 기록된 크기와 비교)
             val prevSize = progressDb.getSyncedFileSize(item.id)
             if (prevSize == fileData!!.size.toLong()) {
-                synced.add(item.id)
-                progressDb.saveSyncedId(item.id)
-                done++
-                skipped++
+                synced.add(item.id); progressDb.saveSyncedId(item.id)
+                done++; skipped++
                 progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped))
                 continue
             }
 
-            // OneDrive 업로드
             val folderPath = "${oneDriveApi.rootFolder}/${item.yearMonth}"
             var uploadDone = false
-            var uploadOk   = false
+            var uploadOk = false
             oneDriveApi.ensureFolder(folderPath) { folderOk ->
                 if (folderOk) {
                     oneDriveApi.uploadFile(fileData!!, item.filename, folderPath) { ok ->
-                        uploadOk = ok
-                        uploadDone = true
+                        uploadOk = ok; uploadDone = true
                     }
-                } else {
-                    uploadDone = true
-                }
+                } else { uploadDone = true }
             }
             while (!uploadDone && scope.isActive) delay(100)
 
@@ -176,14 +219,14 @@ class SyncForegroundService : Service() {
                 notifyProgress("동기화 중 ($pct%) - ${item.filename}", done, total)
                 progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped))
             } else {
-                errors++
-                done++
+                errors++; done++
                 progressDb.addFailedRecord(SyncRecord(item.id, item.filename, "failed", "업로드 실패", fileSize = fileData?.size?.toLong() ?: 0))
                 progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped))
             }
-
             delay(300)
         }
+
+        googleApi.deleteSession(sessionId!!)
 
         val msg = if (scope.isActive) "완료! 성공:${done - errors - skipped} 스킵:${skipped} 실패:${errors}" else "동기화 중단됨"
         notifyProgress(msg, done, total)

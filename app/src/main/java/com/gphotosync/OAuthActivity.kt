@@ -74,7 +74,7 @@ class OAuthActivity : AppCompatActivity() {
                     "client_id" to clientId,
                     "redirect_uri" to REDIRECT_URI,
                     "response_type" to "code",
-                    "scope" to "https://www.googleapis.com/auth/photoslibrary.readonly",
+                    "scope" to "https://www.googleapis.com/auth/photospicker.mediaitems.readonly",
                     "access_type" to "offline",
                     "prompt" to "consent"
                 )

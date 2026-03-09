@@ -1,41 +1,99 @@
 package com.gphotosync
 
 import android.content.Context
+import android.util.Log
 import okhttp3.*
-import org.json.JSONArray
 import org.json.JSONObject
 import java.io.IOException
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.RequestBody.Companion.toRequestBody
 
-/**
- * Google Photos Library API 클라이언트
- */
+data class MediaItem(
+    val id: String,
+    val filename: String,
+    val baseUrl: String,
+    val mimeType: String,
+    val createdAt: String,
+    val isVideo: Boolean
+) {
+    val yearMonth: String get() = if (createdAt.length >= 7) createdAt.substring(0, 7) else "unknown"
+}
+
 class GooglePhotosApi(private val context: Context) {
 
     private val client = OkHttpClient.Builder().build()
-    private val BASE = "https://photoslibrary.googleapis.com/v1"
+    private val PICKER_BASE = "https://photospicker.googleapis.com/v1"
 
-    /**
-     * 모든 미디어 항목 목록 가져오기 (페이지네이션)
-     * @param onPage 페이지마다 호출 (items, nextPageToken?)
-     * @param onDone 완료 콜백 (totalCount)
-     * @param onError 오류 콜백
-     */
-    fun listAllMedia(
-        onPage: (List<MediaItem>, Int) -> Unit,
-        onDone: (Int) -> Unit,
-        onError: (String) -> Unit
-    ) {
+    private fun logToFile(msg: String) {
+        try {
+            val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "sync_log.txt")
+            f.appendText(msg + "\n")
+        } catch (_: Exception) {}
+    }
+
+    /** Picker API: 세션 생성 */
+    fun createSession(callback: (sessionId: String?, pickerUri: String?) -> Unit) {
+        TokenManager.getValidGoogleToken(client) { token ->
+            if (token == null) { logToFile("[Picker] token is null"); callback(null, null); return@getValidGoogleToken }
+
+            val req = Request.Builder()
+                .url("$PICKER_BASE/sessions")
+                .header("Authorization", "Bearer $token")
+                .post("{}".toRequestBody("application/json".toMediaType()))
+                .build()
+
+            client.newCall(req).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    logToFile("[Picker] createSession failed: ${e.message}")
+                    callback(null, null)
+                }
+                override fun onResponse(call: Call, response: Response) {
+                    val body = response.body?.string() ?: "{}"
+                    logToFile("[Picker] createSession resp=${response.code} body=${body.take(300)}")
+                    if (!response.isSuccessful) { callback(null, null); return }
+                    val json = JSONObject(body)
+                    callback(json.optString("id"), json.optString("pickerUri"))
+                }
+            })
+        }
+    }
+
+    /** Picker API: 세션 상태 폴링 */
+    fun pollSession(sessionId: String, callback: (mediaItemsSet: Boolean) -> Unit) {
+        TokenManager.getValidGoogleToken(client) { token ->
+            if (token == null) { callback(false); return@getValidGoogleToken }
+
+            val req = Request.Builder()
+                .url("$PICKER_BASE/sessions/$sessionId")
+                .header("Authorization", "Bearer $token")
+                .build()
+
+            client.newCall(req).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) { callback(false) }
+                override fun onResponse(call: Call, response: Response) {
+                    val body = response.body?.string() ?: "{}"
+                    logToFile("[Picker] pollSession resp=${response.code} body=${body.take(300)}")
+                    val json = JSONObject(body)
+                    callback(json.optBoolean("mediaItemsSet", false))
+                }
+            })
+        }
+    }
+
+    /** Picker API: 선택된 미디어 아이템 목록 */
+    fun listPickedMedia(sessionId: String, onDone: (List<MediaItem>) -> Unit, onError: (String) -> Unit) {
+        val allItems = mutableListOf<MediaItem>()
         var pageToken: String? = null
-        var total = 0
 
         fun fetchPage() {
             TokenManager.getValidGoogleToken(client) { token ->
-                if (token == null) { onError("Google 토큰 없음"); return@getValidGoogleToken }
+                if (token == null) { onError("토큰 없음"); return@getValidGoogleToken }
 
                 val urlBuilder = HttpUrl.Builder()
                     .scheme("https")
-                    .host("photoslibrary.googleapis.com")
+                    .host("photospicker.googleapis.com")
                     .addPathSegments("v1/mediaItems")
+                    .addQueryParameter("sessionId", sessionId)
                     .addQueryParameter("pageSize", "100")
                 if (pageToken != null) {
                     urlBuilder.addQueryParameter("pageToken", pageToken!!)
@@ -47,35 +105,44 @@ class GooglePhotosApi(private val context: Context) {
                     .build()
 
                 client.newCall(req).enqueue(object : Callback {
-                    override fun onFailure(call: Call, e: IOException) = onError(e.message ?: "네트워크 오류")
+                    override fun onFailure(call: Call, e: IOException) { onError(e.message ?: "네트워크 오류") }
                     override fun onResponse(call: Call, response: Response) {
                         val body = response.body?.string() ?: "{}"
-                        if (!response.isSuccessful) {
-                            onError("Google Photos API 오류 ${response.code}: $body")
-                            return
-                        }
-                        val json  = JSONObject(body)
-                        val items = parseItems(json.optJSONArray("mediaItems"))
-                        total += items.size
-                        pageToken = json.optString("nextPageToken", null)
-                        onPage(items, total)
+                        logToFile("[Picker] listMedia resp=${response.code} body=${body.take(500)}")
+                        if (!response.isSuccessful) { onError("API 오류 ${response.code}: $body"); return }
 
+                        val json = JSONObject(body)
+                        val arr = json.optJSONArray("mediaItems")
+                        if (arr != null) {
+                            for (i in 0 until arr.length()) {
+                                val obj = arr.getJSONObject(i)
+                                val mediaFile = obj.optJSONObject("mediaFile")
+                                val isVideo = obj.optString("type") == "VIDEO"
+                                allItems.add(MediaItem(
+                                    id = obj.getString("id"),
+                                    filename = mediaFile?.optString("filename", "photo_$i.jpg") ?: "photo_$i.jpg",
+                                    baseUrl = mediaFile?.optString("baseUrl", "") ?: "",
+                                    mimeType = mediaFile?.optString("mimeType", "image/jpeg") ?: "image/jpeg",
+                                    createdAt = obj.optString("createTime", ""),
+                                    isVideo = isVideo
+                                ))
+                            }
+                        }
+                        pageToken = json.optString("nextPageToken", null)
                         if (pageToken.isNullOrEmpty()) {
-                            onDone(total)
+                            logToFile("[Picker] total picked items: ${allItems.size}")
+                            onDone(allItems)
                         } else {
-                            fetchPage() // 다음 페이지
+                            fetchPage()
                         }
                     }
                 })
             }
         }
-
         fetchPage()
     }
 
-    /**
-     * 단일 미디어 항목 다운로드 (바이트 배열 반환)
-     */
+    /** 미디어 다운로드 */
     fun downloadMedia(item: MediaItem, callback: (ByteArray?) -> Unit) {
         val downloadUrl = if (item.isVideo) "${item.baseUrl}=dv" else "${item.baseUrl}=d"
 
@@ -96,32 +163,21 @@ class GooglePhotosApi(private val context: Context) {
         }
     }
 
-    private fun parseItems(arr: JSONArray?): List<MediaItem> {
-        arr ?: return emptyList()
-        val list = mutableListOf<MediaItem>()
-        for (i in 0 until arr.length()) {
-            val obj = arr.getJSONObject(i)
-            val meta = obj.optJSONObject("mediaMetadata")
-            list.add(MediaItem(
-                id          = obj.getString("id"),
-                filename    = obj.optString("filename", "photo_${i}.jpg"),
-                baseUrl     = obj.optString("baseUrl", ""),
-                mimeType    = obj.optString("mimeType", "image/jpeg"),
-                createdAt   = meta?.optString("creationTime", "") ?: "",
-                isVideo     = meta?.has("video") == true
-            ))
+    /** 세션 삭제 */
+    fun deleteSession(sessionId: String) {
+        TokenManager.getValidGoogleToken(client) { token ->
+            if (token == null) return@getValidGoogleToken
+            val req = Request.Builder()
+                .url("$PICKER_BASE/sessions/$sessionId")
+                .header("Authorization", "Bearer $token")
+                .delete()
+                .build()
+            client.newCall(req).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {}
+                override fun onResponse(call: Call, response: Response) {
+                    logToFile("[Picker] deleteSession resp=${response.code}")
+                }
+            })
         }
-        return list
     }
-}
-
-data class MediaItem(
-    val id: String,
-    val filename: String,
-    val baseUrl: String,
-    val mimeType: String,
-    val createdAt: String,
-    val isVideo: Boolean
-) {
-    val yearMonth: String get() = if (createdAt.length >= 7) createdAt.substring(0, 7) else "unknown"
 }

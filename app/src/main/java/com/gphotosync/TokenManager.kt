@@ -15,6 +15,13 @@ import java.io.IOException
  */
 object TokenManager {
 
+    private fun logToFile(msg: String) {
+        try {
+            val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "sync_log.txt")
+            f.appendText(msg + "\n")
+        } catch (_: Exception) {}
+    }
+
     private const val PREF_NAME = "gphotosync_tokens"
 
     // Google
@@ -72,10 +79,12 @@ object TokenManager {
     fun getValidGoogleToken(client: OkHttpClient, callback: (String?) -> Unit) {
         val access  = get(KEY_G_ACCESS) ?: return callback(null)
         val expiry  = getLong(KEY_G_EXPIRY)
+        logToFile("getValidGoogleToken: expiry=$expiry now=${System.currentTimeMillis()/1000}")
         val refresh = get(KEY_G_REFRESH)
         val clientId     = get(KEY_G_CLIENT_ID)
         val clientSecret = get(KEY_G_CLIENT_SECRET)
 
+        logToFile("token check: now=${System.currentTimeMillis()/1000} expiry=$expiry diff=${expiry - System.currentTimeMillis()/1000}")
         if (System.currentTimeMillis() / 1000 < expiry - 300) {
             callback(access)
             return
@@ -101,6 +110,7 @@ object TokenManager {
             override fun onFailure(call: Call, e: IOException) = callback(null)
             override fun onResponse(call: Call, response: Response) {
                 val json = JSONObject(response.body?.string() ?: "{}")
+                    logToFile("refresh response: $json")
                 if (json.has("access_token")) {
                     val newToken = json.getString("access_token")
                     val expiresIn = json.optLong("expires_in", 3600)
@@ -118,6 +128,7 @@ object TokenManager {
         val refresh = get(KEY_MS_REFRESH)
         val clientId = get(KEY_MS_CLIENT_ID)
 
+        logToFile("token check: now=${System.currentTimeMillis()/1000} expiry=$expiry diff=${expiry - System.currentTimeMillis()/1000}")
         if (System.currentTimeMillis() / 1000 < expiry - 300) {
             callback(access)
             return
@@ -143,6 +154,7 @@ object TokenManager {
             override fun onFailure(call: Call, e: IOException) = callback(null)
             override fun onResponse(call: Call, response: Response) {
                 val json = JSONObject(response.body?.string() ?: "{}")
+                    logToFile("refresh response: $json")
                 if (json.has("access_token")) {
                     val newToken = json.getString("access_token")
                     val expiresIn = json.optLong("expires_in", 3600)

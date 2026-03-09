@@ -91,7 +91,7 @@ class MainActivity : AppCompatActivity() {
             if (isSyncing) {
                 val stopIntent = Intent(this, SyncForegroundService::class.java)
                 stopIntent.action = SyncForegroundService.ACTION_STOP
-                startService(stopIntent)
+                startForegroundService(stopIntent)
                 isSyncing = false
                 binding.btnSync.text = "동기화 시작"
                 binding.btnSync.setBackgroundColor(0xFF2E7D32.toInt())
@@ -171,6 +171,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startSync() {
+        try { java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "sync_log.txt").appendText("${java.util.Date()} startSync called\n") } catch (_: Exception) {}
         isSyncing = true
         binding.btnSync.text = "동기화 중단"
         binding.btnSync.setBackgroundColor(0xFFF44336.toInt())
@@ -182,7 +183,7 @@ class MainActivity : AppCompatActivity() {
 
         val intent = Intent(this, SyncForegroundService::class.java)
         intent.action = SyncForegroundService.ACTION_START
-        startService(intent)
+        startForegroundService(intent)
     }
 
     private fun retryFailed() {
@@ -201,7 +202,7 @@ class MainActivity : AppCompatActivity() {
         SyncForegroundService.retryItems = failedRecords
         val intent = Intent(this, SyncForegroundService::class.java)
         intent.action = SyncForegroundService.ACTION_RETRY
-        startService(intent)
+        startForegroundService(intent)
     }
 
     private fun updateProgress(progress: SyncProgress) {
