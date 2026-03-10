@@ -559,7 +559,7 @@ class TakeoutUploadService : Service() {
                             done++; skipped++
                             if (skipped % 100 == 0 || skipped == 1) {
                                 val pct = if (total > 0) done * 100 / total else 0
-                                notifyProgress("스킵 중 ($pct%) $skipped개 완료", done, total)
+                                notifyProgress("스킵 중 ($pct%) ${skipped}개 완료", done, total)
                                 progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null, doneBytes, skipped))
                             }
                             drain(zis4); e4 = zis4.nextZipEntry; continue
