@@ -87,7 +87,7 @@ class TakeoutUploadService : Service() {
     }
 
     // === 스트림 드레인: 메모리에 올리지 않고 스트림 소비 ===
-    private val drainBuf = ByteArray(16384)
+    private val drainBuf = ByteArray(65536)
     private fun drain(zis: ZipArchiveInputStream) {
         try { while (zis.read(drainBuf) != -1) { } } catch (_: Exception) {}
     }
@@ -187,12 +187,20 @@ class TakeoutUploadService : Service() {
         return map
     }
 
+    private var logWriter: java.io.BufferedWriter? = null
+    private fun getLogWriter(): java.io.BufferedWriter? {
+        if (logWriter == null) {
+            try {
+                val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "sync_log.txt")
+                logWriter = java.io.BufferedWriter(java.io.FileWriter(f, true), 8192)
+            } catch (_: Exception) {}
+        }
+        return logWriter
+    }
+
     private fun liveLog(msg: String) {
         val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
-        try {
-            val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "sync_log.txt")
-            f.appendText("$ts $msg" + "\n")
-        } catch (_: Exception) {}
+        try { getLogWriter()?.apply { write("$ts $msg"); newLine(); flush() } } catch (_: Exception) {}
         android.os.Handler(android.os.Looper.getMainLooper()).post { logCallback?.invoke("[$ts] $msg") }
     }
 
@@ -549,31 +557,46 @@ class TakeoutUploadService : Service() {
 
                         if (e4.name in uploaded) {
                             done++; skipped++
-                            val pct = if (total > 0) done * 100 / total else 0
-                            notifyProgress("이어하기 ($pct%) 스킵: $fn", done, total)
-                            progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null, doneBytes, skipped))
+                            if (skipped % 100 == 0 || skipped == 1) {
+                                val pct = if (total > 0) done * 100 / total else 0
+                                notifyProgress("스킵 중 ($pct%) $skipped개 완료", done, total)
+                                progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null, doneBytes, skipped))
+                            }
                             drain(zis4); e4 = zis4.nextZipEntry; continue
                         }
 
                         val pathInfo = if (albumName != null) "앨범:$albumName" else yearMonth(fn, e4.name)
                         liveLog("[$done/$total] $fn ($pathInfo)")
 
-                        // 스트리밍 읽기: 4MB 이하는 메모리, 초과는 임시파일
-                        val baos = java.io.ByteArrayOutputStream()
-                        val tmpFile: java.io.File?
-                        val buf = ByteArray(16384)
+                        // 스트리밍 읽기: 먼저 4MB까지 메모리에 시도, 초과 시 tmpFile로 전환
+                        val threshold = 4 * 1024 * 1024
+                        val baos = java.io.ByteArrayOutputStream(minOf(entry?.size?.toInt() ?: 65536, threshold))
+                        var tmpFile: java.io.File? = null
+                        var tmpOut: java.io.OutputStream? = null
+                        val buf = ByteArray(32768)
                         var totalRead = 0L
                         var n = zis4.read(buf)
-                        while (n != -1) { baos.write(buf, 0, n); totalRead += n; n = zis4.read(buf) }
+                        while (n != -1) {
+                            totalRead += n
+                            if (tmpOut != null) {
+                                tmpOut.write(buf, 0, n)
+                            } else if (totalRead > threshold) {
+                                // 임계값 초과 → tmpFile로 전환
+                                tmpFile = java.io.File(cacheDir, "takeout_tmp_${System.currentTimeMillis()}")
+                                tmpOut = tmpFile.outputStream().buffered()
+                                tmpOut.write(baos.toByteArray())
+                                tmpOut.write(buf, 0, n)
+                            } else {
+                                baos.write(buf, 0, n)
+                            }
+                            n = zis4.read(buf)
+                        }
+                        tmpOut?.flush(); tmpOut?.close()
                         val fileSize = totalRead
-                        val data: ByteArray
-                        if (totalRead <= 4 * 1024 * 1024) {
-                            data = baos.toByteArray()
-                            tmpFile = null
+                        val data: ByteArray = if (tmpFile != null) {
+                            tmpFile.readBytes()
                         } else {
-                            tmpFile = java.io.File(cacheDir, "takeout_tmp_${System.currentTimeMillis()}")
-                            tmpFile.writeBytes(baos.toByteArray())
-                            data = tmpFile.readBytes()
+                            baos.toByteArray()
                         }
                         try {
 
@@ -679,7 +702,7 @@ class TakeoutUploadService : Service() {
         }
     }
 
-    override fun onDestroy() { super.onDestroy(); job?.cancel(); scope.cancel() }
+    override fun onDestroy() { super.onDestroy(); try { logWriter?.close() } catch (_: Exception) {}; job?.cancel(); scope.cancel() }
 }
 
 data class TakeoutProgress(

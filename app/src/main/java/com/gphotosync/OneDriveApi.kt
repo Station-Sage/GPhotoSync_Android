@@ -139,7 +139,7 @@ class OneDriveApi(private val context: Context) {
     }
 
     private fun uploadChunks(uploadUrl: String, data: ByteArray, callback: (Boolean) -> Unit) {
-        val chunkSize = 3 * 1024 * 1024 // 3MB
+        val chunkSize = 10 * 1024 * 1024 // 10MB
         val total = data.size
         var offset = 0
 
