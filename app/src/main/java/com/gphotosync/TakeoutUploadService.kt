@@ -105,6 +105,17 @@ class TakeoutUploadService : Service() {
         getSharedPreferences("takeout_analyze", MODE_PRIVATE).edit()
             .putInt("sc", sc).putInt("mc", mc).putLong("ts", ts).putInt("jc", jc).apply()
     }
+    private fun saveMediaList(names: Set<String>) {
+        getSharedPreferences("takeout_media_list", MODE_PRIVATE).edit()
+            .putStringSet("names", names).apply()
+    }
+    private fun loadMediaList(): Set<String> {
+        return getSharedPreferences("takeout_media_list", MODE_PRIVATE)
+            .getStringSet("names", emptySet()) ?: emptySet()
+    }
+    private fun clearMediaList() {
+        getSharedPreferences("takeout_media_list", MODE_PRIVATE).edit().clear().apply()
+    }
     private fun loadAnalyzeState(): LongArray {
         val p = getSharedPreferences("takeout_analyze", MODE_PRIVATE)
         return longArrayOf(p.getInt("sc",0).toLong(), p.getInt("mc",0).toLong(), p.getLong("ts",0L), p.getInt("jc",0).toLong())
@@ -212,6 +223,7 @@ class TakeoutUploadService : Service() {
 
                 val cs = CountingInputStream(contentResolver.openInputStream(zipUri)!!)
                 val zis = ZipArchiveInputStream(cs)
+                val mediaNames = mutableSetOf<String>()
                 var sc = 0
                 var entry = zis.nextZipEntry
 
@@ -233,7 +245,7 @@ class TakeoutUploadService : Service() {
                         } else if (isMedia(entry.name)) {
                             val fn = entry.name.substringAfterLast('/')
                             val fd = dateFromName(fn, entry.name)
-                            if (inRange(fd, startDate, endDate)) { mediaCount++; val sz = entry.size; if (sz > 0) totalSize += sz }
+                            if (inRange(fd, startDate, endDate)) { mediaCount++; val sz = entry.size; if (sz > 0) totalSize += sz; mediaNames.add(entry.name) }
                             drain(zis)
                         } else {
                             drain(zis)
@@ -265,7 +277,7 @@ class TakeoutUploadService : Service() {
                     stopForeground(STOP_FOREGROUND_DETACH); stopSelf(); return@launch
                 }
 
-                saveJsonDateMap(); clearAnalyzeState()
+                saveJsonDateMap(); saveMediaList(mediaNames); clearAnalyzeState()
                 liveLog("분석 완료: 전체 ${sc}개, 미디어 ${mediaCount}개, JSON ${jsonCount}개")
                 notifyProgress("분석 완료: 미디어 ${mediaCount}개", 0, 0)
                 android.os.Handler(android.os.Looper.getMainLooper()).post { analyzeCallback?.invoke(mediaCount, totalSize, sc) }
@@ -292,36 +304,48 @@ class TakeoutUploadService : Service() {
                 // JSON 메타데이터 로드 (분석에서 이미 수집된 경우)
                 if (jsonDateMap.isEmpty()) loadJsonDateMap()
                 if (jsonDateMap.isEmpty()) {
-                    liveLog("JSON 메타데이터 수집 중...")
-                    notifyProgress("메타데이터 수집 중...", 0, 0)
-                    val cs2 = contentResolver.openInputStream(zipUri)
-                    val zis2 = ZipArchiveInputStream(cs2)
-                    var je = zis2.nextZipEntry; var jc = 0
-                    while (je != null && isActive) {
-                        if (!je.isDirectory && je.name.endsWith(".json")) {
-                            val js = readJsonSafe(zis2)
-                            if (js != null) { parseJsonMeta(js)?.let { jsonDateMap[it.first] = it.second; jc++ } }
-                        } else { drain(zis2) }
-                        je = zis2.nextZipEntry
+                    loadJsonDateMap()
+                    if (jsonDateMap.isNotEmpty()) {
+                        liveLog("저장된 JSON 메타데이터 ${jsonDateMap.size}개 로드 완료")
+                    } else {
+                        liveLog("JSON 메타데이터 수집 중...")
+                        notifyProgress("메타데이터 수집 중...", 0, 0)
+                        val cs2 = contentResolver.openInputStream(zipUri)
+                        val zis2 = ZipArchiveInputStream(cs2)
+                        var je = zis2.nextZipEntry; var jc = 0
+                        while (je != null && isActive) {
+                            if (!je.isDirectory && je.name.endsWith(".json")) {
+                                val js = readJsonSafe(zis2)
+                                if (js != null) { parseJsonMeta(js)?.let { jsonDateMap[it.first] = it.second; jc++ } }
+                            } else { drain(zis2) }
+                            je = zis2.nextZipEntry
+                        }
+                        zis2.close()
+                        saveJsonDateMap()
+                        liveLog("JSON ${jc}개 수집 완료")
                     }
-                    zis2.close()
-                    liveLog("JSON ${jc}개 수집 완료")
                 }
 
-                // 미디어 파일 목록 수집
-                liveLog("미디어 파일 목록 수집 중...")
-                val mediaNames = mutableSetOf<String>()
-                val zis3 = ZipArchiveInputStream(contentResolver.openInputStream(zipUri))
-                var e3 = zis3.nextZipEntry
-                while (e3 != null && isActive) {
-                    if (!e3.isDirectory && isMedia(e3.name)) {
-                        val fn = e3.name.substringAfterLast('/')
-                        if (inRange(dateFromName(fn, e3.name), startDate, endDate)) mediaNames.add(e3.name)
+                // 분석에서 저장된 미디어 목록 로드
+                liveLog("미디어 파일 목록 로드 중...")
+                var mediaNames = loadMediaList()
+                if (mediaNames.isEmpty()) {
+                    liveLog("저장된 목록 없음. ZIP에서 목록 수집 중...")
+                    val tempNames = mutableSetOf<String>()
+                    val zis3 = ZipArchiveInputStream(contentResolver.openInputStream(zipUri))
+                    var e3 = zis3.nextZipEntry
+                    while (e3 != null && isActive) {
+                        if (!e3.isDirectory && isMedia(e3.name)) {
+                            val fn = e3.name.substringAfterLast('/')
+                            if (inRange(dateFromName(fn, e3.name), startDate, endDate)) tempNames.add(e3.name)
+                        }
+                        drain(zis3)
+                        e3 = zis3.nextZipEntry
                     }
-                    drain(zis3)
-                    e3 = zis3.nextZipEntry
+                    zis3.close()
+                    mediaNames = tempNames
+                    saveMediaList(mediaNames)
                 }
-                zis3.close()
 
                 val total = mediaNames.size
                 if (total == 0) {
@@ -391,6 +415,7 @@ class TakeoutUploadService : Service() {
                 zis4.close()
 
                 clearUploadedFiles()
+                clearMediaList()
                 val ok = done - errors - skipped
                 val msg = "완료! 성공:$ok 스킵:$skipped 실패:$errors (전체:$total)"
                 liveLog(msg); notifyProgress(msg, done, total)
