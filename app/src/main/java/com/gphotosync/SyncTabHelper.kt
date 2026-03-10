@@ -9,19 +9,20 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 class SyncTabHelper(
-    private val activity: MainActivity,
+    private val activity: AppCompatActivity,
     private val syncView: View,
     private val progressDb: SyncProgressStore
 ) {
     var isSyncing = false
     private var liveLogLines = mutableListOf<String>()
-    var historyEntries = listOf<String>()
-    var selectedSessionId: String? = null
+    private var historyEntries = listOf<String>()
+    private var selectedSessionId: String? = null
 
     fun setup() {
         syncView.findViewById<Button>(R.id.btnSync).setOnClickListener {
@@ -69,7 +70,7 @@ class SyncTabHelper(
         updateRetryButton()
     }
 
-    fun startSync() {
+    private fun startSync() {
         isSyncing = true
         liveLogLines.clear()
         syncView.findViewById<TextView>(R.id.tvLiveLog).text = ""
@@ -110,7 +111,8 @@ class SyncTabHelper(
     fun appendLiveLog(line: String) {
         liveLogLines.add(line)
         if (liveLogLines.size > 50) liveLogLines.removeAt(0)
-        syncView.findViewById<TextView>(R.id.tvLiveLog).text = liveLogLines.joinToString("\n")
+        val tv = syncView.findViewById<TextView>(R.id.tvLiveLog)
+        tv.text = liveLogLines.joinToString("\n")
         val sv = syncView.findViewById<ScrollView>(R.id.scrollLiveLog)
         sv.post { sv.fullScroll(View.FOCUS_DOWN) }
     }
@@ -167,7 +169,7 @@ class SyncTabHelper(
         }
     }
 
-    fun refreshDetailLists() {
+    private fun refreshDetailLists() {
         val sid = selectedSessionId
         val successRecords = if (sid != null) progressDb.getSuccessRecordsBySession(sid) else progressDb.getSuccessRecords()
         val failedRecords = if (sid != null) progressDb.getFailedRecordsBySession(sid) else progressDb.getFailedRecords()
@@ -198,7 +200,7 @@ class SyncTabHelper(
     }
 
     private fun saveHistorySummary(progress: SyncProgress) {
-        val prefs = activity.getSharedPreferences("sync_history", android.content.Context.MODE_PRIVATE)
+        val prefs = activity.getSharedPreferences("sync_history", AppCompatActivity.MODE_PRIVATE)
         val fmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
         val now = fmt.format(Date())
         val success = progress.done - progress.errors - progress.skipped
@@ -211,7 +213,7 @@ class SyncTabHelper(
     }
 
     fun loadHistorySummary() {
-        val prefs = activity.getSharedPreferences("sync_history", android.content.Context.MODE_PRIVATE)
+        val prefs = activity.getSharedPreferences("sync_history", AppCompatActivity.MODE_PRIVATE)
         val history = prefs.getStringSet("entries", emptySet()) ?: emptySet()
         val card = syncView.findViewById<View>(R.id.cardHistory)
         val lv = syncView.findViewById<ListView>(R.id.lvHistory)
