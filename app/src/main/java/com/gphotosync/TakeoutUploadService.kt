@@ -50,6 +50,7 @@ class TakeoutUploadService : Service() {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var job: Job? = null
     private val jsonDateMap = mutableMapOf<String, String>()
+    private val createdFolders = mutableSetOf<String>()
 
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onCreate() { super.onCreate(); createNotificationChannel() }
@@ -442,7 +443,7 @@ class TakeoutUploadService : Service() {
                         liveLog("⚠ 복사 실패 (원본 없을 수 있음): $fn")
                     }
                     progressCallback?.invoke(TakeoutProgress(copied, total, errors, false, null))
-                    delay(150)
+
                 }
 
                 val msg = "앨범 정리 완료! 복사:${copied - errors} 실패:$errors (전체:$total)"
@@ -560,21 +561,36 @@ class TakeoutUploadService : Service() {
                         val pathInfo = if (albumName != null) "앨범:$albumName" else yearMonth(fn, e4.name)
                         liveLog("[$done/$total] $fn ($pathInfo)")
 
-                        // 임시 파일에 저장 (OOM 방지)
-                        val tmpFile = java.io.File(cacheDir, "takeout_tmp_${System.currentTimeMillis()}")
+                        // 스트리밍 읽기: 4MB 이하는 메모리, 초과는 임시파일
+                        val baos = java.io.ByteArrayOutputStream()
+                        val tmpFile: java.io.File?
+                        val buf = ByteArray(16384)
+                        var totalRead = 0L
+                        var n = zis4.read(buf)
+                        while (n != -1) { baos.write(buf, 0, n); totalRead += n; n = zis4.read(buf) }
+                        val fileSize = totalRead
+                        val data: ByteArray
+                        if (totalRead <= 4 * 1024 * 1024) {
+                            data = baos.toByteArray()
+                            tmpFile = null
+                        } else {
+                            tmpFile = java.io.File(cacheDir, "takeout_tmp_${System.currentTimeMillis()}")
+                            tmpFile.writeBytes(baos.toByteArray())
+                            data = tmpFile.readBytes()
+                        }
                         try {
-                            tmpFile.outputStream().use { out ->
-                                val buf = ByteArray(16384)
-                                var n = zis4.read(buf)
-                                while (n != -1) { out.write(buf, 0, n); n = zis4.read(buf) }
-                            }
-                            val fileSize = tmpFile.length()
-                            val data = tmpFile.readBytes()
 
                             var uDone = false; var uOk = false
-                            api.ensureFolder(fp) { ok ->
-                                if (ok) api.uploadFile(data, fn, fp) { uOk = it; uDone = true }
-                                else uDone = true
+                            if (fp in createdFolders) {
+                                // 폴더 이미 생성됨 - 바로 업로드
+                                api.uploadFile(data, fn, fp) { uOk = it; uDone = true }
+                            } else {
+                                api.ensureFolder(fp) { ok ->
+                                    if (ok) {
+                                        createdFolders.add(fp)
+                                        api.uploadFile(data, fn, fp) { uOk = it; uDone = true }
+                                    } else uDone = true
+                                }
                             }
                             while (!uDone && isActive) delay(100)
 
@@ -584,10 +600,9 @@ class TakeoutUploadService : Service() {
                                 val sizeKB = String.format("%.1f", fileSize / 1024.0); liveLog("✅ $fn (${sizeKB}KB)")
                                 notifyProgress("업로드 $pct% - $fn", done, total)
                             } else { done++; errors++; liveLog("❌ $fn") }
-                        } finally { tmpFile.delete() }
+                        } finally { tmpFile?.delete() }
 
                         progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null, doneBytes, skipped))
-                        delay(200)
                     } else { drain(zis4) }
                     e4 = zis4.nextZipEntry
                 }

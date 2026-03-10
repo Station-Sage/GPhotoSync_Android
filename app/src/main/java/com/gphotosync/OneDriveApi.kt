@@ -6,6 +6,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 import java.net.URLEncoder
 
 /**
@@ -20,7 +21,11 @@ class OneDriveApi(private val context: Context) {
         } catch (_: Exception) {}
     }
 
-    private val client = OkHttpClient.Builder().build()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(120, TimeUnit.SECONDS)
+        .build()
     private val GRAPH  = "https://graph.microsoft.com/v1.0"
     private val ROOT_FOLDER = "Pictures/GooglePhotos"
 
