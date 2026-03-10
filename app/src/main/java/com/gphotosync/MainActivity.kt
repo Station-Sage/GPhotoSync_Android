@@ -26,6 +26,13 @@ import java.util.Date
 import java.util.Locale
 import java.io.File
 import java.io.FileWriter
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import android.widget.ArrayAdapter
+import android.widget.ListView
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 
 class MainActivity : AppCompatActivity() {
 
@@ -77,6 +84,8 @@ class MainActivity : AppCompatActivity() {
         progressDb = SyncProgressStore(this)
 
         setupTabs()
+
+        requestNotificationPermission()
 
         SyncForegroundService.progressCallback = { progress ->
             runOnUiThread { updateProgress(progress) }
@@ -329,16 +338,27 @@ class MainActivity : AppCompatActivity() {
         prefs.edit().putStringSet("entries", history).putString("latest", entry).apply()
     }
 
+    private var historyEntries = listOf<String>()
+
     private fun loadHistorySummary() {
         val v = syncView ?: return
         val prefs = getSharedPreferences("sync_history", MODE_PRIVATE)
         val history = prefs.getStringSet("entries", emptySet()) ?: emptySet()
         val card = v.findViewById<View>(R.id.cardHistory)
+        val lv = v.findViewById<ListView>(R.id.lvHistory)
+
         if (history.isNotEmpty()) {
             card.visibility = View.VISIBLE
-            val sorted = history.sortedDescending()
-            v.findViewById<TextView>(R.id.tvHistorySummary).text = sorted.take(10).joinToString("\n")
+            historyEntries = history.sortedDescending().take(20)
+            val adapter = ArrayAdapter(this, android.R.layout.simple_list_item_activated_1, historyEntries)
+            lv.adapter = adapter
+            lv.choiceMode = ListView.CHOICE_MODE_SINGLE
+            lv.setOnItemClickListener { _, _, position, _ ->
+                lv.setItemChecked(position, true)
+                refreshDetailLists()
+            }
         }
+
         val successCount = progressDb.getSuccessRecords().size
         val failedCount = progressDb.getFailedRecords().size
         if (successCount > 0 || failedCount > 0) {
@@ -622,6 +642,15 @@ class MainActivity : AppCompatActivity() {
             }
         } catch (e: Exception) {
             Toast.makeText(this, "JSON 파싱 오류: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9999)
+            }
         }
     }
 
