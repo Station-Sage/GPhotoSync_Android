@@ -141,7 +141,7 @@ class TakeoutUploadService : Service() {
         val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
         try {
             val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "sync_log.txt")
-            f.appendText("$ts $msg\n")
+            f.appendText("$ts $msg" + "\n")
         } catch (_: Exception) {}
         android.os.Handler(android.os.Looper.getMainLooper()).post { logCallback?.invoke("[$ts] $msg") }
     }
@@ -220,7 +220,7 @@ class TakeoutUploadService : Service() {
                         sc++
                         if (sc <= skipCount) {
                             drain(zis)
-                            if (sc % 2000 == 0) notifyProgress("이전 위치로 이동 중... $sc/$skipCount", sc, skipCount)
+                            if (sc.rem(2000) == 0) notifyProgress("이전 위치로 이동 중... $sc/$skipCount", sc, skipCount)
                             entry = zis.nextZipEntry; continue
                         }
 
@@ -239,15 +239,15 @@ class TakeoutUploadService : Service() {
                             drain(zis)
                         }
 
-                        if (sc % 100 == 0) {
+                        if (sc.rem(100) == 0) {
                             saveAnalyzeState(sc, mediaCount, totalSize, jsonCount)
-                            if (sc % 500 == 0) saveJsonDateMap()
+                            if (sc.rem(500) == 0) saveJsonDateMap()
                             val pct = if (zipBytes > 0) (cs.bytesRead * 100 / zipBytes).toInt() else 0
                             val rdMB = String.format("%.0f", cs.bytesRead / 1048576.0)
                             notifyProgress("분석 $pct% ($rdMB/$zipMB MB) | 파일$sc 미디어$mediaCount",
                                 if (zipBytes > 0) (cs.bytesRead / 1048576).toInt() else 0,
                                 if (zipBytes > 0) (zipBytes / 1048576).toInt() else 0)
-                            if (sc % 500 == 0) liveLog("분석 $pct%: $sc개 스캔, 미디어 $mediaCount, JSON $jsonCount")
+                            if (sc.rem(500) == 0) liveLog("분석 $pct%: $sc개 스캔, 미디어 $mediaCount, JSON $jsonCount")
                             if (zipBytes > 0) progressCallback?.invoke(TakeoutProgress(pct, 100, 0, false, null, cs.bytesRead, 0))
                         }
                     }
