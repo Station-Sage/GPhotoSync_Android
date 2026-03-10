@@ -700,7 +700,7 @@ class TakeoutUploadService : Service() {
                     liveLog("❌ 루트 폴더 생성 실패: ${api.rootFolder}")
                     return@launch
                 }
-                synchronized(lock) {
+                synchronized(createdFolders) {
                     val rp = api.rootFolder.split("/")
                     for (i in 1..rp.size) createdFolders.add(rp.take(i).joinToString("/"))
                 }
@@ -712,7 +712,7 @@ class TakeoutUploadService : Service() {
                         api.listChildren(api.rootFolder) { cont.resume(it ?: emptyList()) }
                     }
                     val yearFolders = children.filter { it.third }.map { it.second }
-                    synchronized(lock) {
+                    synchronized(createdFolders) {
                         yearFolders.forEach { name ->
                             createdFolders.add("${api.rootFolder}/$name")
                         }
