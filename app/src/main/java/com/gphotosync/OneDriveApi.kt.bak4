@@ -5,7 +5,6 @@ import okhttp3.*
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
-import org.json.JSONArray
 import java.io.IOException
 import java.util.concurrent.TimeUnit
 import java.net.URLEncoder
@@ -77,17 +76,14 @@ class OneDriveApi(private val context: Context) {
     /**
      * 파일을 OneDrive에 업로드 (4MB 이하: 단순 업로드, 초과: 청크 업로드)
      */
-    /**
-     * 파일 업로드 후 driveItem id 반환 (실패 시 null)
-     */
     fun uploadFile(
         fileData: ByteArray,
         filename: String,
         folderPath: String,
-        callback: (String?) -> Unit
+        callback: (Boolean) -> Unit
     ) {
         TokenManager.getValidMicrosoftToken(client) { token ->
-            if (token == null) { callback(null); return@getValidMicrosoftToken }
+            if (token == null) { callback(false); return@getValidMicrosoftToken }
 
             val safeName = URLEncoder.encode(filename, "UTF-8").replace("+", "%20")
             val uploadPath = "$folderPath/$filename"
@@ -103,7 +99,7 @@ class OneDriveApi(private val context: Context) {
         }
     }
 
-    private fun simpleUpload(token: String, data: ByteArray, encodedPath: String, callback: (String?) -> Unit) {
+    private fun simpleUpload(token: String, data: ByteArray, encodedPath: String, callback: (Boolean) -> Unit) {
         val body = data.toRequestBody("application/octet-stream".toMediaType())
         val req  = Request.Builder()
             .url("$GRAPH/me/drive/root:/$encodedPath:/content")
@@ -112,19 +108,12 @@ class OneDriveApi(private val context: Context) {
             .build()
 
         client.newCall(req).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) { logToFile("[OD] upload onFailure: ${e.message}"); callback(null) }
-            override fun onResponse(call: Call, response: Response) {
-                val body = response.body?.string()
-                logToFile("[OD] upload resp=${response.code} ${body?.take(200)}")
-                if (response.code in 200..201 && body != null) {
-                    val id = try { JSONObject(body).optString("id", "") } catch (_: Exception) { "" }
-                    callback(id.ifEmpty { null })
-                } else callback(null)
-            }
+            override fun onFailure(call: Call, e: IOException) { logToFile("[OD] upload onFailure: ${e.message}"); callback(false) }
+            override fun onResponse(call: Call, response: Response) { logToFile("[OD] upload resp=${response.code} ${response.body?.string()?.take(200)}"); callback(response.code in 200..201) }
         })
     }
 
-    private fun chunkedUpload(token: String, data: ByteArray, encodedPath: String, callback: (String?) -> Unit) {
+    private fun chunkedUpload(token: String, data: ByteArray, encodedPath: String, callback: (Boolean) -> Unit) {
         // 1. 업로드 세션 생성
         val sessionBody = JSONObject().apply {
             put("item", JSONObject().apply {
@@ -139,23 +128,23 @@ class OneDriveApi(private val context: Context) {
             .build()
 
         client.newCall(sessionReq).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) { logToFile("[OD] chunked onFailure: ${e.message}"); callback(null) }
+            override fun onFailure(call: Call, e: IOException) { logToFile("[OD] chunked onFailure: ${e.message}"); callback(false) }
             override fun onResponse(call: Call, response: Response) {
-                if (!response.isSuccessful) { callback(null); return }
+                if (!response.isSuccessful) { callback(false); return }
                 val uploadUrl = JSONObject(response.body?.string() ?: "{}").optString("uploadUrl", "")
-                if (uploadUrl.isEmpty()) { callback(null); return }
+                if (uploadUrl.isEmpty()) { callback(false); return }
                 uploadChunks(uploadUrl, data, callback)
             }
         })
     }
 
-    private fun uploadChunks(uploadUrl: String, data: ByteArray, callback: (String?) -> Unit) {
+    private fun uploadChunks(uploadUrl: String, data: ByteArray, callback: (Boolean) -> Unit) {
         val chunkSize = 10 * 1024 * 1024 // 10MB
         val total = data.size
         var offset = 0
 
         fun uploadNext() {
-            if (offset >= total) { callback(null); return } // should not reach here
+            if (offset >= total) { callback(true); return }
             val end   = minOf(offset + chunkSize, total)
             val chunk = data.copyOfRange(offset, end)
             val req   = Request.Builder()
@@ -166,17 +155,12 @@ class OneDriveApi(private val context: Context) {
                 .build()
 
             client.newCall(req).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) { logToFile("[OD] chunked onFailure: ${e.message}"); callback(null) }
+                override fun onFailure(call: Call, e: IOException) { logToFile("[OD] chunked onFailure: ${e.message}"); callback(false) }
                 override fun onResponse(call: Call, response: Response) {
-                    val respBody = response.body?.string()
-                    if (response.code in listOf(200, 201)) {
-                        // 완료 — id 추출
-                        val id = try { JSONObject(respBody ?: "{}").optString("id", "") } catch (_: Exception) { "" }
-                        callback(id.ifEmpty { null })
-                    } else if (response.code == 202) {
+                    if (response.code in listOf(200, 201, 202)) {
                         offset = end
                         uploadNext()
-                    } else callback(null)
+                    } else callback(false)
                 }
             })
         }
@@ -268,66 +252,6 @@ class OneDriveApi(private val context: Context) {
                                 }
                             }
                         })
-                    }
-                }
-            })
-        }
-    }
-
-
-    /**
-     * 경로로 driveItem id 조회
-     */
-    fun getItemId(filePath: String, callback: (String?) -> Unit) {
-        TokenManager.getValidMicrosoftToken(client) { token ->
-            if (token == null) { callback(null); return@getValidMicrosoftToken }
-            val encodedPath = filePath.trim('/').split("/").joinToString("/") {
-                URLEncoder.encode(it, "UTF-8").replace("+", "%20")
-            }
-            val req = Request.Builder()
-                .url("$GRAPH/me/drive/root:/$encodedPath?\$select=id")
-                .header("Authorization", "Bearer $token")
-                .get().build()
-            client.newCall(req).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) { callback(null) }
-                override fun onResponse(call: Call, response: Response) {
-                    response.use {
-                        if (it.code == 200) {
-                            val id = try { JSONObject(it.body?.string() ?: "{}").optString("id", "") } catch (_: Exception) { "" }
-                            callback(id.ifEmpty { null })
-                        } else callback(null)
-                    }
-                }
-            })
-        }
-    }
-
-    /**
-     * OneDrive 앨범(bundle) 생성 — 용량 0, 참조만
-     * @param name 앨범 이름
-     * @param childIds driveItem id 목록
-     */
-    fun createAlbum(name: String, childIds: List<String>, callback: (Boolean) -> Unit) {
-        TokenManager.getValidMicrosoftToken(client) { token ->
-            if (token == null) { logToFile("[OD] createAlbum token NULL"); callback(false); return@getValidMicrosoftToken }
-            val children = JSONArray()
-            for (id in childIds) { children.put(JSONObject().put("id", id)) }
-            val body = JSONObject().apply {
-                put("name", name)
-                put("@microsoft.graph.conflictBehavior", "rename")
-                put("bundle", JSONObject().put("album", JSONObject()))
-                put("children", children)
-            }.toString().toRequestBody("application/json".toMediaType())
-            val req = Request.Builder()
-                .url("$GRAPH/me/drive/bundles")
-                .header("Authorization", "Bearer $token")
-                .post(body).build()
-            client.newCall(req).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) { logToFile("[OD] createAlbum fail: ${e.message}"); callback(false) }
-                override fun onResponse(call: Call, response: Response) {
-                    response.use {
-                        logToFile("[OD] createAlbum resp=${it.code} ${it.body?.string()?.take(300)}")
-                        callback(it.code in 200..201)
                     }
                 }
             })

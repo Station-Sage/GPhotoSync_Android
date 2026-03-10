@@ -62,15 +62,9 @@ class TakeoutUploadService : Service() {
     private suspend fun ensureFolderSuspend(api: OneDriveApi, path: String): Boolean =
         suspendCoroutine { cont -> api.ensureFolder(path) { cont.resume(it) } }
 
-    private suspend fun uploadFileSuspend(api: OneDriveApi, data: ByteArray, fn: String, fp: String): String? =
+    private suspend fun uploadFileSuspend(api: OneDriveApi, data: ByteArray, fn: String, fp: String): Boolean =
         suspendCoroutine { cont -> api.uploadFile(data, fn, fp) { cont.resume(it) } }
 
-
-    private suspend fun getItemIdSuspend(api: OneDriveApi, path: String): String? =
-        suspendCoroutine { cont -> api.getItemId(path) { cont.resume(it) } }
-
-    private suspend fun createAlbumSuspend(api: OneDriveApi, name: String, ids: List<String>): Boolean =
-        suspendCoroutine { cont -> api.createAlbum(name, ids) { cont.resume(it) } }
 
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onCreate() { super.onCreate(); createNotificationChannel() }
@@ -188,18 +182,6 @@ class TakeoutUploadService : Service() {
     }
     private fun clearUploadedFiles() { getSharedPreferences("takeout_progress", MODE_PRIVATE).edit().clear().apply() }
 
-    // driveItem id 저장 (파일명 → id)
-    @Synchronized
-    private fun saveDriveItemId(filename: String, driveId: String) {
-        val p = getSharedPreferences("takeout_drive_ids", MODE_PRIVATE)
-        p.edit().putString(filename, driveId).apply()
-    }
-    fun loadDriveItemIds(): Map<String, String> {
-        val p = getSharedPreferences("takeout_drive_ids", MODE_PRIVATE)
-        return p.all.mapNotNull { (k, v) -> if (v is String) k to v else null }.toMap()
-    }
-    private fun clearDriveItemIds() { getSharedPreferences("takeout_drive_ids", MODE_PRIVATE).edit().clear().apply() }
-
 
     // 앨범 매핑 저장/로드 (파일 ZIP경로 → 앨범명)
     private fun saveAlbumMap(map: Map<String, String>) {
@@ -293,13 +275,12 @@ class TakeoutUploadService : Service() {
         return folderName
     }
 
-    private fun yearOnly(filename: String, path: String): String {
-        jsonDateMap[filename]?.let {
-            // "2024/01" → "2024"
-            return it.substringBefore("/")
-        }
+    private fun yearMonth(filename: String, path: String): String {
+        jsonDateMap[filename]?.let { return it }
+        val ym = Regex("""((?:19|20)\d{2})[-_]?(\d{2})[-_]?\d{2}""")
+        (ym.find(filename) ?: ym.find(path))?.let { return "${it.groupValues[1]}/${it.groupValues[2]}" }
         val yr = Regex("""((?:19|20)\d{2})""")
-        (yr.find(filename) ?: yr.find(path))?.let { return it.groupValues[1] }
+        (yr.find(filename) ?: yr.find(path))?.let { return "${it.groupValues[1]}/unknown" }
         return "unknown"
     }
 
@@ -418,7 +399,7 @@ class TakeoutUploadService : Service() {
     }
 
 
-    // ======== 앨범 정리 (OneDrive bundle 앨범 생성 — 용량 0) ========
+    // ======== 앨범 정리 (기존 업로드 파일을 앨범 폴더로 복사) ========
     private fun organizeAlbums() {
         val api = OneDriveApi(this)
         job = scope.launch {
@@ -430,80 +411,64 @@ class TakeoutUploadService : Service() {
                     stopForeground(STOP_FOREGROUND_DETACH); stopSelf(); return@launch
                 }
 
+                // 업로드 완료된 파일 중 앨범이 있는 것만 처리
                 val uploaded = Collections.synchronizedSet(getUploadedFiles())
                 val albumFiles = albumMap.filter { it.key in uploaded }
+
                 if (albumFiles.isEmpty()) {
                     liveLog("앨범 정리 대상 없음 (업로드된 앨범 파일 없음)")
                     android.os.Handler(android.os.Looper.getMainLooper()).post { organizeCallback?.invoke(0, 0, 0) }
                     stopForeground(STOP_FOREGROUND_DETACH); stopSelf(); return@launch
                 }
 
-                if (jsonDateMap.isEmpty()) loadJsonDateMap()
-
-                // 저장된 driveItem id 로드
-                val savedIds = loadDriveItemIds()
-
-                // 앨범별로 그룹핑
-                val albumGroups = mutableMapOf<String, MutableList<String>>() // 앨범명 → zipPath 목록
-                for ((zipPath, albumName) in albumFiles) {
-                    albumGroups.getOrPut(albumName) { mutableListOf() }.add(zipPath)
-                }
-
-                val total = albumGroups.size
-                var done = 0; var errors = 0
-                liveLog("앨범 생성 시작: ${total}개 앨범 (${albumFiles.size}개 파일)")
-                notifyProgress("앨범 생성 (${total}개)", 0, total)
+                val total = albumFiles.size
+                var copied = 0; var errors = 0
+                liveLog("앨범 정리 시작: ${total}개 파일")
+                notifyProgress("앨범 정리 (${total}개)", 0, total)
                 progressCallback?.invoke(TakeoutProgress(0, total, 0, false, null))
 
-                for ((albumName, zipPaths) in albumGroups) {
+                // JSON 메타데이터 로드 (날짜 폴더 경로 결정용)
+                if (jsonDateMap.isEmpty()) loadJsonDateMap()
+
+                for ((zipPath, albumName) in albumFiles) {
                     if (!isActive) break
 
-                    // 각 파일의 driveItem id 수집
-                    val ids = mutableListOf<String>()
-                    for (zp in zipPaths) {
-                        // 1. 저장된 id가 있으면 사용
-                        val savedId = savedIds[zp]
-                        if (savedId != null) { ids.add(savedId); continue }
+                    val fn = zipPath.substringAfterLast('/')
+                    val ym = yearMonth(fn, zipPath)
+                    val srcPath = "${api.rootFolder}/$ym/$fn"
+                    val dstFolder = "${api.rootFolder}/Albums/$albumName"
 
-                        // 2. 없으면 OneDrive에서 경로로 조회
-                        val fn = zp.substringAfterLast('/')
-                        val yr = yearOnly(fn, zp)
-                        val filePath = "${api.rootFolder}/$yr/$fn"
-                        val id = getItemIdSuspend(api, filePath)
-                        if (id != null) {
-                            ids.add(id)
-                            saveDriveItemId(zp, id) // 다음에 재사용
-                        } else {
-                            liveLog("⚠ id 조회 실패: $fn")
-                        }
-                    }
+                    // 대상 폴더 생성
+                    val folderOk = ensureFolderSuspend(api, dstFolder)
 
-                    done++
-                    if (ids.isEmpty()) {
-                        errors++
-                        liveLog("❌ $albumName: 파일 id 없음")
-                        progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null))
+                    if (!folderOk) {
+                        errors++; copied++
+                        liveLog("❌ 폴더 생성 실패: $dstFolder")
+                        progressCallback?.invoke(TakeoutProgress(copied, total, errors, false, null))
                         continue
                     }
 
-                    // bundle 앨범 생성
-                    val ok = createAlbumSuspend(api, albumName, ids)
-                    if (ok) {
-                        val pct = done * 100 / total
-                        liveLog("📁 $albumName (${ids.size}개 파일)")
-                        notifyProgress("앨범 생성 $pct% - $albumName", done, total)
+                    // OneDrive에서 파일 복사
+                    val copyOk = suspendCoroutine<Boolean> { cont -> api.copyFile(srcPath, dstFolder, fn) { cont.resume(it) } }
+
+                    copied++
+                    if (copyOk) {
+                        val pct = copied * 100 / total
+                        liveLog("📁 $fn → Albums/$albumName")
+                        notifyProgress("앨범 정리 $pct% - $fn", copied, total)
                     } else {
                         errors++
-                        liveLog("❌ 앨범 생성 실패: $albumName")
+                        liveLog("⚠ 복사 실패 (원본 없을 수 있음): $fn")
                     }
-                    progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null))
+                    progressCallback?.invoke(TakeoutProgress(copied, total, errors, false, null))
+
                 }
 
-                val msg = "앨범 생성 완료! ${done - errors}개 앨범 (실패:$errors)"
+                val msg = "앨범 정리 완료! 복사:${copied - errors} 실패:$errors (전체:$total)"
                 liveLog(msg)
                 (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIF_ID, buildDoneNotification("✅ $msg"))
-                progressCallback?.invoke(TakeoutProgress(done, total, errors, true, null))
-                android.os.Handler(android.os.Looper.getMainLooper()).post { organizeCallback?.invoke(total, done - errors, errors) }
+                progressCallback?.invoke(TakeoutProgress(copied, total, errors, true, null))
+                android.os.Handler(android.os.Looper.getMainLooper()).post { organizeCallback?.invoke(total, copied - errors, errors) }
                 stopForeground(STOP_FOREGROUND_DETACH); stopSelf()
             } catch (e: CancellationException) {
                 liveLog("앨범 정리 중단됨")
@@ -516,7 +481,6 @@ class TakeoutUploadService : Service() {
             }
         }
     }
-
 
     // ======== 업로드 ========
     private fun startUpload(zipUri: Uri, startDate: String? = null, endDate: String? = null, resume: Boolean = false) {
@@ -609,7 +573,7 @@ class TakeoutUploadService : Service() {
                                 val fp = if (albumName != null) {
                                     "${api.rootFolder}/Albums/$albumName"
                                 } else {
-                                    val ym = yearOnly(fn, e4.name)
+                                    val ym = yearMonth(fn, e4.name)
                                     "${api.rootFolder}/$ym"
                                 }
 
@@ -694,16 +658,12 @@ class TakeoutUploadService : Service() {
                                     ok
                                 }
 
-                                val driveItemId = if (folderOk) uploadFileSuspend(api, item.data, item.fn, item.fp) else null
+                                val uOk = if (folderOk) uploadFileSuspend(api, item.data, item.fn, item.fp) else false
 
-                                if (driveItemId != null) {
+                                if (uOk) {
                                     val d = aDone.incrementAndGet()
                                     aDoneBytes.addAndGet(item.fileSize)
-                                    synchronized(lock) {
-                                        uploaded.add(item.zipName)
-                                        addUploadedFile(item.zipName)
-                                    }
-                                    saveDriveItemId(item.zipName, driveItemId)
+                                    synchronized(lock) { uploaded.add(item.zipName); addUploadedFile(item.zipName) }
                                     val pct = if (total > 0) d * 100 / total else 0
                                     val sizeKB = String.format("%.1f", item.fileSize / 1024.0)
                                     liveLog("✅ ${item.fn} (${sizeKB}KB)")
