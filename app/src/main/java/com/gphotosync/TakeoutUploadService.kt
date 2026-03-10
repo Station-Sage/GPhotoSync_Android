@@ -694,6 +694,34 @@ class TakeoutUploadService : Service() {
                 }
 
                 isRunning = true
+                // 루트 폴더 미리 생성 (Pictures/GooglePhotos)
+                val rootOk = ensureFolderSuspend(api, api.rootFolder)
+                if (!rootOk) {
+                    liveLog("❌ 루트 폴더 생성 실패: ${api.rootFolder}")
+                    return@launch
+                }
+                synchronized(lock) {
+                    val rp = api.rootFolder.split("/")
+                    for (i in 1..rp.size) createdFolders.add(rp.take(i).joinToString("/"))
+                }
+                liveLog("✅ 루트 폴더 준비 완료: ${api.rootFolder}")
+
+                // 기존 연도 폴더 목록 미리 캐싱
+                try {
+                    val children = suspendCoroutine<List<Triple<String, String, Boolean>>> { cont ->
+                        api.listChildren(api.rootFolder) { cont.resume(it ?: emptyList()) }
+                    }
+                    val yearFolders = children.filter { it.third }.map { it.second }
+                    synchronized(lock) {
+                        yearFolders.forEach { name ->
+                            createdFolders.add("${api.rootFolder}/$name")
+                        }
+                    }
+                    liveLog("📂 기존 폴더 ${yearFolders.size}개 캐싱: ${yearFolders.take(5).joinToString()}...")
+                } catch (e: Exception) {
+                    liveLog("⚠ 폴더 캐싱 실패 (계속 진행): ${e.message}")
+                }
+
                 uploadStartTime = System.currentTimeMillis()
                 liveLog("미디어 ${total}개. 업로드 시작...")
                 notifyProgress("업로드 시작 (${total}개)", 0, total)
