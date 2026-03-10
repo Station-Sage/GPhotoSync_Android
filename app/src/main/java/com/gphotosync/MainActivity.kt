@@ -26,6 +26,7 @@ import java.util.Date
 import java.util.Locale
 import java.io.File
 import java.io.FileWriter
+import java.util.zip.ZipInputStream
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -45,6 +46,9 @@ class MainActivity : AppCompatActivity() {
     private var syncView: View? = null
     private var authView: View? = null
     private var infoView: View? = null
+    private var takeoutView: View? = null
+    private var selectedZipUri: android.net.Uri? = null
+    private var takeoutLogLines = mutableListOf<String>()
 
     private val googleAuthLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -76,6 +80,12 @@ class MainActivity : AppCompatActivity() {
         uri?.let { importAuthFromJson(it) }
     }
 
+    private val zipFilePicker = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { onZipSelected(it) }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         TokenManager.init(this)
@@ -92,6 +102,13 @@ class MainActivity : AppCompatActivity() {
         }
         SyncForegroundService.logCallback = { line ->
             runOnUiThread { appendLiveLog(line) }
+        }
+
+        TakeoutUploadService.progressCallback = { progress ->
+            runOnUiThread { updateTakeoutProgress(progress) }
+        }
+        TakeoutUploadService.logCallback = { line ->
+            runOnUiThread { appendTakeoutLog(line) }
         }
     }
 
@@ -111,14 +128,17 @@ class MainActivity : AppCompatActivity() {
         tabLayout.addTab(tabLayout.newTab().setText("동기화"))
         tabLayout.addTab(tabLayout.newTab().setText("인증"))
         tabLayout.addTab(tabLayout.newTab().setText("정보"))
+        tabLayout.addTab(tabLayout.newTab().setText("Takeout"))
 
         syncView = LayoutInflater.from(this).inflate(R.layout.tab_sync, contentFrame, false)
         authView = LayoutInflater.from(this).inflate(R.layout.tab_auth, contentFrame, false)
         infoView = LayoutInflater.from(this).inflate(R.layout.tab_info, contentFrame, false)
+        takeoutView = LayoutInflater.from(this).inflate(R.layout.tab_takeout, contentFrame, false)
 
         setupSyncTab()
         setupAuthTab()
         setupInfoTab()
+        setupTakeoutTab()
 
         contentFrame.addView(syncView)
 
@@ -129,6 +149,7 @@ class MainActivity : AppCompatActivity() {
                     0 -> { contentFrame.addView(syncView); loadHistorySummary() }
                     1 -> { contentFrame.addView(authView); updateAuthUI() }
                     2 -> contentFrame.addView(infoView)
+                    3 -> contentFrame.addView(takeoutView)
                 }
             }
             override fun onTabUnselected(tab: TabLayout.Tab) {}
@@ -429,6 +450,134 @@ class MainActivity : AppCompatActivity() {
             if (TokenManager.isMicrosoftAuthed()) "✅ 인증 완료" else "❌ 미인증"
         v.findViewById<android.widget.Button>(R.id.btnMsAuth).text =
             if (!msToken.isNullOrEmpty()) "재인증" else "로그인"
+    }
+
+    // ======== TAKEOUT TAB ========
+    private fun setupTakeoutTab() {
+        val v = takeoutView ?: return
+
+        v.findViewById<android.widget.Button>(R.id.btnSelectZip).setOnClickListener {
+            zipFilePicker.launch("application/zip")
+        }
+
+        v.findViewById<android.widget.Button>(R.id.btnStartTakeout).setOnClickListener {
+            val uri = selectedZipUri
+            if (uri == null) {
+                Toast.makeText(this, "ZIP 파일을 먼저 선택하세요", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (!TokenManager.isMicrosoftAuthed()) {
+                Toast.makeText(this, "먼저 인증 탭에서 Microsoft 로그인하세요", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            startTakeoutUpload(uri)
+        }
+
+        v.findViewById<android.widget.Button>(R.id.btnStopTakeout).setOnClickListener {
+            val stopIntent = Intent(this, TakeoutUploadService::class.java)
+            stopIntent.action = TakeoutUploadService.ACTION_STOP
+            startForegroundService(stopIntent)
+            v.findViewById<android.widget.Button>(R.id.btnStopTakeout).visibility = View.GONE
+            v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = true
+            v.findViewById<android.widget.Button>(R.id.btnStartTakeout).text = "🚀 OneDrive에 업로드"
+        }
+    }
+
+    private fun onZipSelected(uri: Uri) {
+        selectedZipUri = uri
+        val v = takeoutView ?: return
+
+        // ZIP 파일 정보 표시
+        Thread {
+            try {
+                val input = contentResolver.openInputStream(uri)
+                val zis = ZipInputStream(input)
+                var mediaCount = 0
+                var totalSize = 0L
+                val imageExt = setOf("jpg","jpeg","png","gif","bmp","webp","heic","heif","tiff","tif","raw","cr2","nef","arw","dng")
+                val videoExt = setOf("mp4","mov","avi","mkv","wmv","flv","webm","m4v","3gp")
+                var entry = zis.nextEntry
+                while (entry != null) {
+                    if (!entry.isDirectory) {
+                        val ext = entry.name.substringAfterLast('.', "").lowercase()
+                        if (ext in imageExt || ext in videoExt) {
+                            mediaCount++
+                            totalSize += entry.size
+                        }
+                    }
+                    zis.closeEntry()
+                    entry = zis.nextEntry
+                }
+                zis.close()
+                val sizeMB = String.format("%.1f", totalSize / 1024.0 / 1024.0)
+                runOnUiThread {
+                    v.findViewById<TextView>(R.id.tvZipInfo).text = "미디어 파일: ${mediaCount}개 (약 ${sizeMB}MB)"
+                    v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = mediaCount > 0
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    v.findViewById<TextView>(R.id.tvZipInfo).text = "ZIP 분석 실패: ${e.message}"
+                }
+            }
+        }.start()
+    }
+
+    private fun startTakeoutUpload(uri: Uri) {
+        takeoutLogLines.clear()
+        val v = takeoutView ?: return
+        v.findViewById<TextView>(R.id.tvTakeoutLog).text = ""
+        v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = false
+        v.findViewById<android.widget.Button>(R.id.btnStopTakeout).visibility = View.VISIBLE
+        v.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar).visibility = View.VISIBLE
+        v.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar).isIndeterminate = true
+        v.findViewById<TextView>(R.id.tvTakeoutProgress).visibility = View.VISIBLE
+        v.findViewById<TextView>(R.id.tvTakeoutStatus).text = "업로드 시작..."
+
+        val intent = Intent(this, TakeoutUploadService::class.java)
+        intent.action = TakeoutUploadService.ACTION_START
+        intent.putExtra(TakeoutUploadService.EXTRA_ZIP_URI, uri.toString())
+        startForegroundService(intent)
+    }
+
+    private fun updateTakeoutProgress(progress: TakeoutProgress) {
+        val v = takeoutView ?: return
+        val pb = v.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar)
+        val tvProgress = v.findViewById<TextView>(R.id.tvTakeoutProgress)
+        val tvStatus = v.findViewById<TextView>(R.id.tvTakeoutStatus)
+
+        if (progress.total > 0) {
+            pb.isIndeterminate = false
+            pb.max = progress.total
+            pb.progress = progress.done
+            val pct = progress.done * 100 / progress.total
+            val doneMB = String.format("%.1f", progress.doneBytes / 1024.0 / 1024.0)
+            tvProgress.text = "${progress.done}/${progress.total} ($pct%) | ${doneMB}MB"
+        }
+
+        if (progress.finished) {
+            v.findViewById<android.widget.Button>(R.id.btnStopTakeout).visibility = View.GONE
+            v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = true
+            v.findViewById<android.widget.Button>(R.id.btnStartTakeout).text = "🚀 OneDrive에 업로드"
+            val success = progress.done - progress.errors
+            if (progress.errorMessage != null) {
+                tvStatus.text = "오류: ${progress.errorMessage}"
+            } else {
+                tvStatus.text = "완료! 성공:${success} 실패:${progress.errors}"
+            }
+        } else {
+            tvStatus.text = "업로드 중..."
+        }
+    }
+
+    private fun appendTakeoutLog(line: String) {
+        takeoutLogLines.add(line)
+        if (takeoutLogLines.size > 50) takeoutLogLines.removeAt(0)
+        val v = takeoutView ?: return
+        val tv = v.findViewById<TextView>(R.id.tvTakeoutLog)
+        tv.text = takeoutLogLines.joinToString("
+")
+        val sv = v.findViewById<ScrollView>(R.id.scrollTakeoutLog)
+        sv.post { sv.fullScroll(View.FOCUS_DOWN) }
     }
 
     // ======== INFO TAB ========

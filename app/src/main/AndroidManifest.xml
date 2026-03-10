@@ -52,6 +52,11 @@
 
         <service
             android:name=".SyncForegroundService"
+
+        <service
+            android:name=".TakeoutUploadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
