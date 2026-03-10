@@ -722,7 +722,7 @@ class TakeoutUploadService : Service() {
                                         if (skipOneDriveCheck) {
                                             val d = aDone.incrementAndGet()
                                             val s = aSkipped.incrementAndGet()
-                                            if (s % 100 == 0 || s == 1) {
+                                            if (s % 50 == 0 || s == 1) {
                                                 val pct = if (total > 0) d * 100 / total else 0
                                                 notifyProgress("스킵 중 ($pct%) ${s}개 완료", d, total)
                                                 progressCallback?.invoke(TakeoutProgress(d, total, aErrors.get(), false, null, aDoneBytes.get(), s))
@@ -739,7 +739,7 @@ class TakeoutUploadService : Service() {
                                         } else {
                                             val d = aDone.incrementAndGet()
                                             val s = aSkipped.incrementAndGet()
-                                            if (s % 100 == 0 || s == 1) {
+                                            if (s % 50 == 0 || s == 1) {
                                                 val pct = if (total > 0) d * 100 / total else 0
                                                 notifyProgress("스킵 중 ($pct%) ${s}개 완료", d, total)
                                                 progressCallback?.invoke(TakeoutProgress(d, total, aErrors.get(), false, null, aDoneBytes.get(), s))
@@ -751,7 +751,7 @@ class TakeoutUploadService : Service() {
                                         if (skipOneDriveCheck) {
                                             val d = aDone.incrementAndGet()
                                             val s = aSkipped.incrementAndGet()
-                                            if (s % 100 == 0 || s == 1) {
+                                            if (s % 50 == 0 || s == 1) {
                                                 val pct = if (total > 0) d * 100 / total else 0
                                                 notifyProgress("스킵 중 ($pct%) ${s}개 완료", d, total)
                                                 progressCallback?.invoke(TakeoutProgress(d, total, aErrors.get(), false, null, aDoneBytes.get(), s))
@@ -766,7 +766,7 @@ class TakeoutUploadService : Service() {
                                         } else {
                                             val d = aDone.incrementAndGet()
                                             val s = aSkipped.incrementAndGet()
-                                            if (s % 100 == 0 || s == 1) {
+                                            if (s % 50 == 0 || s == 1) {
                                                 val pct = if (total > 0) d * 100 / total else 0
                                                 notifyProgress("스킵 중 ($pct%) ${s}개 완료", d, total)
                                                 progressCallback?.invoke(TakeoutProgress(d, total, aErrors.get(), false, null, aDoneBytes.get(), s))
@@ -922,7 +922,7 @@ class TakeoutUploadService : Service() {
     @Synchronized
     private fun notifyProgress(msg: String, done: Int, total: Int) {
         val now = System.currentTimeMillis()
-        if (now - lastNotifyTime < 300 && done < total) return  // 300ms 쓰로틀
+        if (now - lastNotifyTime < 500 && done < total && done > 0) return  // 500ms 쓰로틀 (첫 호출은 항상 통과)
         lastNotifyTime = now
         (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIF_ID, buildNotification(msg, done, total))
     }
