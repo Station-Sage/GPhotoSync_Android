@@ -244,6 +244,24 @@ class TakeoutTabHelper(
         activity.getSharedPreferences("takeout_session", AppCompatActivity.MODE_PRIVATE).edit()
             .putString("zip_uri", uri.toString()).apply()
 
+        // 기존 분석 결과가 있으면 재사용
+        val savedMedia = activity.getSharedPreferences("takeout_media_list", AppCompatActivity.MODE_PRIVATE)
+            .getStringSet("names", emptySet()) ?: emptySet()
+        if (savedMedia.isNotEmpty()) {
+            val savedSize = activity.getSharedPreferences("takeout_analyze", AppCompatActivity.MODE_PRIVATE).getLong("ts", 0L)
+            val sizeMB = String.format("%.1f", savedSize / 1024.0 / 1024.0)
+            val sizeText = if (savedSize > 0) " (약 ${sizeMB}MB)" else ""
+            lastZipInfoText = "미디어 파일: ${savedMedia.size}개${sizeText} (이전 분석 결과)"
+            takeoutView.findViewById<TextView>(R.id.tvZipInfo).text = lastZipInfoText
+            takeoutView.findViewById<Button>(R.id.btnStartTakeout).isEnabled = true
+            takeoutView.findViewById<TextView>(R.id.tvTakeoutStatus).text = "이전 분석 결과 사용. 업로드 가능합니다."
+            appendTakeoutLog("이전 분석 결과 재사용: 미디어 ${savedMedia.size}개${sizeText}")
+            val hasResumable = activity.getSharedPreferences("takeout_progress", AppCompatActivity.MODE_PRIVATE)
+                .getStringSet("uf", emptySet())?.isNotEmpty() == true
+            if (hasResumable) takeoutView.findViewById<Button>(R.id.btnResumeTakeout).visibility = View.VISIBLE
+            return
+        }
+
         appendTakeoutLog("ZIP 파일 선택됨, 분석 시작...")
         takeoutView.findViewById<TextView>(R.id.tvZipInfo).text = "ZIP 파일 분석 중..."
         takeoutView.findViewById<Button>(R.id.btnStartTakeout).isEnabled = false

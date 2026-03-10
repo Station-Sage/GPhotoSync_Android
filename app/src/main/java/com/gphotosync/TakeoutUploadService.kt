@@ -371,8 +371,15 @@ class TakeoutUploadService : Service() {
                 notifyProgress("업로드 시작 (${total}개)", 0, total)
                 progressCallback?.invoke(TakeoutProgress(0, total, 0, false, null))
 
-                val uploaded = if (resume) getUploadedFiles() else { clearUploadedFiles(); mutableSetOf() }
-                if (resume && uploaded.isNotEmpty()) liveLog("이어하기: ${uploaded.size}개 스킵")
+                val uploaded: MutableSet<String>
+                if (resume) {
+                    uploaded = getUploadedFiles()
+                    if (uploaded.isNotEmpty()) liveLog("이어하기: ${uploaded.size}개 스킵")
+                } else {
+                    // 새 업로드도 기존 완료 목록은 유지 (스킵 가속)
+                    uploaded = getUploadedFiles()
+                    if (uploaded.isNotEmpty()) liveLog("기존 완료 ${uploaded.size}개는 스킵합니다")
+                }
 
                 var done = 0; var errors = 0; var skipped = 0; var doneBytes = 0L
                 val zis4 = ZipArchiveInputStream(contentResolver.openInputStream(zipUri))
@@ -403,20 +410,8 @@ class TakeoutUploadService : Service() {
                                 while (n != -1) { out.write(buf, 0, n); n = zis4.read(buf) }
                             }
                             val fileSize = tmpFile.length()
-
-                            // 중복 체크
-                            var exSize: Long? = null; var ck = false
-                            api.checkFileExists("$fp/$fn") { exSize = it; ck = true }
-                            while (!ck && isActive) delay(100)
-
-                            if (exSize != null && exSize == fileSize) {
-                                done++; skipped++; uploaded.add(e4.name); addUploadedFile(e4.name)
-                                liveLog("⏭ 중복: $fn")
-                                progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null, doneBytes, skipped))
-                                tmpFile.delete(); e4 = zis4.nextZipEntry; continue
-                            }
-
                             val data = tmpFile.readBytes()
+
                             var uDone = false; var uOk = false
                             api.ensureFolder(fp) { ok ->
                                 if (ok) api.uploadFile(data, fn, fp) { uOk = it; uDone = true }
