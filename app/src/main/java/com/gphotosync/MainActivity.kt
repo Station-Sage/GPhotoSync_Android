@@ -552,68 +552,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun restoreTakeoutState() {
-        val v = takeoutView ?: return
-        // 로그 복원
-        if (takeoutLogLines.isNotEmpty()) {
-            v.findViewById<TextView>(R.id.tvTakeoutLog).text = takeoutLogLines.joinToString("\n")
-            val sv = v.findViewById<ScrollView>(R.id.scrollTakeoutLog)
-            sv.post { sv.fullScroll(View.FOCUS_DOWN) }
-        }
-        // ZIP 정보 복원
-        if (selectedZipUri != null) {
-            v.findViewById<TextView>(R.id.tvZipInfo)?.text = lastZipInfoText
-        }
-        // 날짜 필터 복원
-        if (filterStartDate != null) v.findViewById<android.widget.Button>(R.id.btnStartDate)?.text = filterStartDate
-        if (filterEndDate != null) v.findViewById<android.widget.Button>(R.id.btnEndDate)?.text = filterEndDate
-        if (filterStartDate != null || filterEndDate != null) {
-            v.findViewById<TextView>(R.id.tvDateRange)?.text = "${filterStartDate ?: "처음"} ~ ${filterEndDate ?: "끝"}"
-        }
-        // 분석 중 상태 복원
-        if (isTakeoutAnalyzing) {
-            val pb = v.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar)
-            pb.visibility = View.VISIBLE
-            v.findViewById<TextView>(R.id.tvTakeoutProgress).visibility = View.VISIBLE
-            v.findViewById<TextView>(R.id.tvTakeoutProgress).text = lastAnalyzeStatusText
-            v.findViewById<TextView>(R.id.tvTakeoutStatus).visibility = View.VISIBLE
-            v.findViewById<TextView>(R.id.tvTakeoutStatus).text = "백그라운드에서 ZIP 분석 중..."
-            v.findViewById<android.widget.Button>(R.id.btnStopAnalyze).visibility = View.VISIBLE
-            v.findViewById<android.widget.Button>(R.id.btnResumeAnalyze).visibility = View.GONE
-            v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = false
-            val p = lastTakeoutProgress
-            if (p != null && p.total > 0) {
-                pb.isIndeterminate = false
-                pb.max = p.total
-                pb.progress = p.done
-            }
-            return
-        }
-        // 업로드 중 상태 복원
-        if (isTakeoutUploading) {
-            val pb = v.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar)
-            pb.visibility = View.VISIBLE
-            v.findViewById<TextView>(R.id.tvTakeoutProgress).visibility = View.VISIBLE
-            v.findViewById<TextView>(R.id.tvTakeoutStatus).visibility = View.VISIBLE
-            v.findViewById<android.widget.Button>(R.id.btnStopTakeout).visibility = View.VISIBLE
-            v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = false
-            val p = lastTakeoutProgress
-            if (p != null && p.total > 0) {
-                pb.isIndeterminate = false
-                pb.max = p.total
-                pb.progress = p.done
-                val pct = p.done * 100 / p.total
-                val doneMB = String.format("%.1f", p.doneBytes / 1024.0 / 1024.0)
-                v.findViewById<TextView>(R.id.tvTakeoutProgress).text = "${p.done}/${p.total} ($pct%) | ${doneMB}MB"
-            }
-            v.findViewById<TextView>(R.id.tvTakeoutStatus).text = "업로드 중..."
-            return
-        }
-        // 완료/대기 상태
-        if (lastTakeoutStatusText.isNotEmpty()) {
-            v.findViewById<TextView>(R.id.tvTakeoutStatus).text = lastTakeoutStatusText
-        }
-    }
 
     private fun setupTakeoutTab() {
         val v = takeoutView ?: return
