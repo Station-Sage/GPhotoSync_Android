@@ -85,6 +85,11 @@ class TakeoutTabHelper(
                         takeoutView.findViewById<Button>(R.id.btnResumeTakeout).visibility = View.VISIBLE
                         appendTakeoutLog("이전 업로드 이어하기 가능")
                     }
+                    // 앨범 정리 버튼 표시
+                    val albumCount = activity.getSharedPreferences("takeout_album_map", AppCompatActivity.MODE_PRIVATE).getInt("c", 0)
+                    if (albumCount > 0 && hasResumable) {
+                        takeoutView.findViewById<Button>(R.id.btnOrganizeAlbums)?.visibility = View.VISIBLE
+                    }
                 } else {
                     takeoutView.findViewById<TextView>(R.id.tvZipInfo).text = "이전 ZIP 파일 선택됨 (분석 필요)"
                     appendTakeoutLog("이전 ZIP 파일 복원됨. 분석이 필요합니다.")
@@ -199,6 +204,26 @@ class TakeoutTabHelper(
             selectedZipUri?.let { onZipSelected(it) }
         }
 
+        takeoutView.findViewById<Button>(R.id.btnOrganizeAlbums)?.setOnClickListener {
+            appendTakeoutLog("앨범 폴더 정리 시작...")
+            takeoutView.findViewById<Button>(R.id.btnOrganizeAlbums)?.isEnabled = false
+            isTakeoutUploading = true; isTakeoutAnalyzing = false
+            setupCallbacks()
+
+            TakeoutUploadService.organizeCallback = fun(total: Int, copied: Int, errors: Int) {
+                isTakeoutUploading = false
+                takeoutView.findViewById<Button>(R.id.btnOrganizeAlbums)?.isEnabled = true
+                if (total > 0) {
+                    appendTakeoutLog("앨범 정리 완료: 복사 $copied, 실패 $errors (전체 $total)")
+                    takeoutView.findViewById<TextView>(R.id.tvTakeoutStatus).text = "앨범 정리 완료! $copied개 복사"
+                }
+            }
+
+            val intent = Intent(activity, TakeoutUploadService::class.java)
+            intent.action = TakeoutUploadService.ACTION_ORGANIZE_ALBUMS
+            activity.startForegroundService(intent)
+        }
+
         takeoutView.findViewById<Button>(R.id.btnStopAnalyze).setOnClickListener {
             val stopIntent = Intent(activity, TakeoutUploadService::class.java)
             stopIntent.action = TakeoutUploadService.ACTION_STOP
@@ -294,6 +319,8 @@ class TakeoutTabHelper(
                 takeoutView.findViewById<Button>(R.id.btnStartTakeout).isEnabled = mediaCount > 0
                 appendTakeoutLog("분석 완료: 미디어 ${mediaCount}개 발견 (전체 ${scannedCount}개 파일)")
                 if (mediaCount == 0) appendTakeoutLog("미디어 파일이 없습니다. 날짜 필터를 확인하세요.")
+                val ac = activity.getSharedPreferences("takeout_album_map", AppCompatActivity.MODE_PRIVATE).getInt("c", 0)
+                if (ac > 0) appendTakeoutLog("앨범 ${ac}개 감지됨 - 업로드 후 앨범 정리 가능")
             }
             takeoutView.findViewById<TextView>(R.id.tvTakeoutStatus).text = "ZIP 파일을 선택 후 업로드하세요"
         }
@@ -376,6 +403,11 @@ class TakeoutTabHelper(
                 val s = "오류: ${progress.errorMessage}"; tvStatus.text = s; lastTakeoutStatusText = s
             } else {
                 val s = "완료! 성공:${success} 스킵:${progress.skipped} 실패:${progress.errors}"; tvStatus.text = s; lastTakeoutStatusText = s
+            }
+            // 앨범 정리 버튼 표시
+            val albumCount = activity.getSharedPreferences("takeout_album_map", AppCompatActivity.MODE_PRIVATE).getInt("c", 0)
+            if (albumCount > 0) {
+                takeoutView.findViewById<Button>(R.id.btnOrganizeAlbums)?.visibility = View.VISIBLE
             }
         } else { tvStatus.text = "업로드 중..." }
     }

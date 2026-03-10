@@ -194,5 +194,64 @@ class OneDriveApi(private val context: Context) {
         }
     }
 
+
+    /**
+     * OneDrive에서 파일을 다른 폴더로 복사
+     */
+    fun copyFile(srcPath: String, dstFolder: String, filename: String, callback: (Boolean) -> Unit) {
+        TokenManager.getValidMicrosoftToken(client) { token ->
+            if (token == null) { callback(false); return@getValidMicrosoftToken }
+
+            val encodedSrc = srcPath.trim('/').split("/").joinToString("/") {
+                URLEncoder.encode(it, "UTF-8").replace("+", "%20")
+            }
+
+            // 먼저 대상 폴더의 driveItem ID를 가져와야 함
+            val encodedDst = dstFolder.trim('/').split("/").joinToString("/") {
+                URLEncoder.encode(it, "UTF-8").replace("+", "%20")
+            }
+
+            val dstReq = Request.Builder()
+                .url("$GRAPH/me/drive/root:/$encodedDst")
+                .header("Authorization", "Bearer $token")
+                .get()
+                .build()
+
+            client.newCall(dstReq).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) { logToFile("[OD] copyFile dst lookup fail: ${e.message}"); callback(false) }
+                override fun onResponse(call: Call, response: Response) {
+                    response.use { resp ->
+                        if (!resp.isSuccessful) { callback(false); return }
+                        val dstId = JSONObject(resp.body?.string() ?: "{}").optString("id", "")
+                        if (dstId.isEmpty()) { callback(false); return }
+
+                        // copy 요청
+                        val body = JSONObject().apply {
+                            put("parentReference", JSONObject().put("id", dstId))
+                            put("name", filename)
+                        }.toString().toRequestBody("application/json".toMediaType())
+
+                        val copyReq = Request.Builder()
+                            .url("$GRAPH/me/drive/root:/$encodedSrc:/copy")
+                            .header("Authorization", "Bearer $token")
+                            .post(body)
+                            .build()
+
+                        client.newCall(copyReq).enqueue(object : Callback {
+                            override fun onFailure(call: Call, e: IOException) { logToFile("[OD] copyFile fail: ${e.message}"); callback(false) }
+                            override fun onResponse(call: Call, response: Response) {
+                                response.use { r ->
+                                    logToFile("[OD] copyFile resp=${r.code}")
+                                    // copy는 202 Accepted (비동기) 또는 201
+                                    callback(r.code in listOf(200, 201, 202))
+                                }
+                            }
+                        })
+                    }
+                }
+            })
+        }
+    }
+
     val rootFolder: String get() = ROOT_FOLDER
 }

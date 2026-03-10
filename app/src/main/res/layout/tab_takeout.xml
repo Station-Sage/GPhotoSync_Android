@@ -255,6 +255,16 @@
                     android:backgroundTint="#FF6F00"
                     android:layout_marginTop="8dp"
                     android:visibility="gone" />
+
+                <Button
+                    android:id="@+id/btnOrganizeAlbums"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:text="📁 앨범 폴더 정리"
+                    android:textSize="14sp"
+                    android:backgroundTint="#1565C0"
+                    android:layout_marginTop="8dp"
+                    android:visibility="gone" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 

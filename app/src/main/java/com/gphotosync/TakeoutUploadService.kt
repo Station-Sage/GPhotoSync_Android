@@ -36,6 +36,7 @@ class TakeoutUploadService : Service() {
         const val ACTION_ANALYZE = "com.gphotosync.TAKEOUT_ANALYZE"
         const val ACTION_RESUME = "com.gphotosync.TAKEOUT_RESUME"
         const val ACTION_ANALYZE_RESUME = "com.gphotosync.TAKEOUT_ANALYZE_RESUME"
+        const val ACTION_ORGANIZE_ALBUMS = "com.gphotosync.TAKEOUT_ORGANIZE_ALBUMS"
         const val EXTRA_ZIP_URI = "zip_uri"
         const val CHANNEL_ID = "takeout_channel"
         const val NOTIF_ID = 2001
@@ -43,6 +44,7 @@ class TakeoutUploadService : Service() {
         var progressCallback: ((TakeoutProgress) -> Unit)? = null
         var logCallback: ((String) -> Unit)? = null
         var analyzeCallback: ((Int, Long, Int) -> Unit)? = null
+        var organizeCallback: ((Int, Int, Int) -> Unit)? = null  // (total, copied, errors)
     }
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -74,6 +76,10 @@ class TakeoutUploadService : Service() {
                 val uriStr = intent.getStringExtra(EXTRA_ZIP_URI) ?: return START_NOT_STICKY
                 startForeground(NOTIF_ID, buildNotification("ZIP 분석 이어하기...", 0, 0))
                 analyzeZip(Uri.parse(uriStr), intent.getStringExtra("start_date"), intent.getStringExtra("end_date"), true)
+            }
+            ACTION_ORGANIZE_ALBUMS -> {
+                startForeground(NOTIF_ID, buildNotification("앨범 정리 중...", 0, 0))
+                organizeAlbums()
             }
         }
         return START_NOT_STICKY
@@ -161,6 +167,27 @@ class TakeoutUploadService : Service() {
         p.edit().putStringSet("uf", s).apply()
     }
     private fun clearUploadedFiles() { getSharedPreferences("takeout_progress", MODE_PRIVATE).edit().clear().apply() }
+
+
+    // 앨범 매핑 저장/로드 (파일 ZIP경로 → 앨범명)
+    private fun saveAlbumMap(map: Map<String, String>) {
+        val p = getSharedPreferences("takeout_album_map", MODE_PRIVATE).edit().clear()
+        p.putInt("c", map.size)
+        var i = 0
+        for ((k, v) in map) { p.putString("k$i", k).putString("v$i", v); i++ }
+        p.apply()
+    }
+
+    fun loadAlbumMap(): Map<String, String> {
+        val p = getSharedPreferences("takeout_album_map", MODE_PRIVATE)
+        val map = mutableMapOf<String, String>()
+        for (i in 0 until p.getInt("c", 0)) {
+            val k = p.getString("k$i", null) ?: continue
+            val v = p.getString("v$i", null) ?: continue
+            map[k] = v
+        }
+        return map
+    }
 
     private fun liveLog(msg: String) {
         val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
@@ -271,6 +298,7 @@ class TakeoutUploadService : Service() {
                 val cs = CountingInputStream(contentResolver.openInputStream(zipUri)!!)
                 val zis = ZipArchiveInputStream(cs)
                 val mediaNames = mutableSetOf<String>()
+                val albumMap = mutableMapOf<String, String>()
                 var sc = 0
                 var entry = zis.nextZipEntry
 
@@ -292,7 +320,11 @@ class TakeoutUploadService : Service() {
                         } else if (isMedia(entry.name)) {
                             val fn = entry.name.substringAfterLast('/')
                             val fd = dateFromName(fn, entry.name)
-                            if (inRange(fd, startDate, endDate)) { mediaCount++; val sz = entry.size; if (sz > 0) totalSize += sz; mediaNames.add(entry.name) }
+                            if (inRange(fd, startDate, endDate)) {
+                                mediaCount++; val sz = entry.size; if (sz > 0) totalSize += sz; mediaNames.add(entry.name)
+                                val album = extractAlbumName(entry.name)
+                                if (album != null) albumMap[entry.name] = album
+                            }
                             drain(zis)
                         } else {
                             drain(zis)
@@ -324,7 +356,7 @@ class TakeoutUploadService : Service() {
                     stopForeground(STOP_FOREGROUND_DETACH); stopSelf(); return@launch
                 }
 
-                saveJsonDateMap(); saveMediaList(mediaNames); clearAnalyzeState()
+                saveJsonDateMap(); saveMediaList(mediaNames); saveAlbumMap(albumMap); clearAnalyzeState()
                 liveLog("분석 완료: 전체 ${sc}개, 미디어 ${mediaCount}개, JSON ${jsonCount}개")
                 (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIF_ID, buildDoneNotification("✅ 분석 완료: 미디어 ${mediaCount}개"))
                 android.os.Handler(android.os.Looper.getMainLooper()).post { analyzeCallback?.invoke(mediaCount, totalSize, sc) }
@@ -338,6 +370,94 @@ class TakeoutUploadService : Service() {
             } catch (e: Exception) {
                 liveLog("ZIP 분석 실패: ${e.message}")
                 android.os.Handler(android.os.Looper.getMainLooper()).post { analyzeCallback?.invoke(-1, 0L, 0) }
+                stopForeground(STOP_FOREGROUND_DETACH); stopSelf()
+            }
+        }
+    }
+
+
+    // ======== 앨범 정리 (기존 업로드 파일을 앨범 폴더로 복사) ========
+    private fun organizeAlbums() {
+        val api = OneDriveApi(this)
+        job = scope.launch {
+            try {
+                val albumMap = loadAlbumMap()
+                if (albumMap.isEmpty()) {
+                    liveLog("앨범 매핑 데이터 없음. 먼저 ZIP 분석을 실행하세요.")
+                    android.os.Handler(android.os.Looper.getMainLooper()).post { organizeCallback?.invoke(0, 0, 0) }
+                    stopForeground(STOP_FOREGROUND_DETACH); stopSelf(); return@launch
+                }
+
+                // 업로드 완료된 파일 중 앨범이 있는 것만 처리
+                val uploaded = getUploadedFiles()
+                val albumFiles = albumMap.filter { it.key in uploaded }
+
+                if (albumFiles.isEmpty()) {
+                    liveLog("앨범 정리 대상 없음 (업로드된 앨범 파일 없음)")
+                    android.os.Handler(android.os.Looper.getMainLooper()).post { organizeCallback?.invoke(0, 0, 0) }
+                    stopForeground(STOP_FOREGROUND_DETACH); stopSelf(); return@launch
+                }
+
+                val total = albumFiles.size
+                var copied = 0; var errors = 0
+                liveLog("앨범 정리 시작: ${total}개 파일")
+                notifyProgress("앨범 정리 (${total}개)", 0, total)
+                progressCallback?.invoke(TakeoutProgress(0, total, 0, false, null))
+
+                // JSON 메타데이터 로드 (날짜 폴더 경로 결정용)
+                if (jsonDateMap.isEmpty()) loadJsonDateMap()
+
+                for ((zipPath, albumName) in albumFiles) {
+                    if (!isActive) break
+
+                    val fn = zipPath.substringAfterLast('/')
+                    val ym = yearMonth(fn, zipPath)
+                    val srcPath = "${api.rootFolder}/$ym/$fn"
+                    val dstFolder = "${api.rootFolder}/Albums/$albumName"
+
+                    // 대상 폴더 생성
+                    var folderOk = false; var folderDone = false
+                    api.ensureFolder(dstFolder) { folderOk = it; folderDone = true }
+                    while (!folderDone && isActive) delay(100)
+
+                    if (!folderOk) {
+                        errors++; copied++
+                        liveLog("❌ 폴더 생성 실패: $dstFolder")
+                        progressCallback?.invoke(TakeoutProgress(copied, total, errors, false, null))
+                        continue
+                    }
+
+                    // OneDrive에서 파일 복사
+                    var copyOk = false; var copyDone = false
+                    api.copyFile(srcPath, dstFolder, fn) { copyOk = it; copyDone = true }
+                    while (!copyDone && isActive) delay(100)
+
+                    copied++
+                    if (copyOk) {
+                        val pct = copied * 100 / total
+                        liveLog("📁 $fn → Albums/$albumName")
+                        notifyProgress("앨범 정리 $pct% - $fn", copied, total)
+                    } else {
+                        errors++
+                        liveLog("⚠ 복사 실패 (원본 없을 수 있음): $fn")
+                    }
+                    progressCallback?.invoke(TakeoutProgress(copied, total, errors, false, null))
+                    delay(150)
+                }
+
+                val msg = "앨범 정리 완료! 복사:${copied - errors} 실패:$errors (전체:$total)"
+                liveLog(msg)
+                (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIF_ID, buildDoneNotification("✅ $msg"))
+                progressCallback?.invoke(TakeoutProgress(copied, total, errors, true, null))
+                android.os.Handler(android.os.Looper.getMainLooper()).post { organizeCallback?.invoke(total, copied - errors, errors) }
+                stopForeground(STOP_FOREGROUND_DETACH); stopSelf()
+            } catch (e: CancellationException) {
+                liveLog("앨범 정리 중단됨")
+                progressCallback?.invoke(TakeoutProgress(0, 0, 0, true, "중단됨"))
+                stopForeground(STOP_FOREGROUND_DETACH); stopSelf()
+            } catch (e: Exception) {
+                liveLog("앨범 정리 오류: ${e.message}")
+                progressCallback?.invoke(TakeoutProgress(0, 0, 0, true, e.message))
                 stopForeground(STOP_FOREGROUND_DETACH); stopSelf()
             }
         }
