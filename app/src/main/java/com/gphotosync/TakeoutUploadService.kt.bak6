@@ -559,7 +559,7 @@ class TakeoutUploadService : Service() {
 
                 // 파이프라인: ZIP 읽기 → Channel → 병렬 업로드 (3 workers)
                 data class UploadItem(val zipName: String, val fn: String, val fp: String, val data: ByteArray, val fileSize: Long, val tmpFile: java.io.File?)
-                val channel = Channel<UploadItem>(8) // 버퍼 8개: Producer가 미리 읽어둠
+                val channel = Channel<UploadItem>(3) // 버퍼 3개
 
                 // Producer: ZIP에서 읽어서 Channel에 전달
                 val producer = launch {
@@ -611,18 +611,7 @@ class TakeoutUploadService : Service() {
                                     n = zis4.read(buf)
                                 }
                                 tmpOut?.flush(); tmpOut?.close()
-                                val data: ByteArray
-                                if (tmpFile != null) {
-                                    // baos 잔여분을 tmpFile에 flush 후 baos 해제
-                                    if (baos.size() > 0 && tmpFile.length() == 0L.coerceAtLeast(totalRead - baos.size())) {
-                                        // baos 내용은 이미 tmpOut에 write됨 (threshold 초과 시점에)
-                                    }
-                                    baos.reset() // GC 가능하도록 즉시 해제
-                                    data = tmpFile.readBytes()
-                                } else {
-                                    data = baos.toByteArray()
-                                    baos.reset()
-                                }
+                                val data = if (tmpFile != null) tmpFile.readBytes() else baos.toByteArray()
 
                                 try {
                                     channel.send(UploadItem(e4.name, fn, fp, data, totalRead, tmpFile))
@@ -648,13 +637,7 @@ class TakeoutUploadService : Service() {
                                 val folderOk = if (alreadyCached) true
                                 else {
                                     val ok = ensureFolderSuspend(api, item.fp)
-                                    if (ok) synchronized(lock) {
-                                        // 전체 경로 + 모든 부분 경로 캐시
-                                        val parts = item.fp.split("/")
-                                        for (i in 1..parts.size) {
-                                            createdFolders.add(parts.take(i).joinToString("/"))
-                                        }
-                                    }
+                                    if (ok) synchronized(lock) { createdFolders.add(item.fp) }
                                     ok
                                 }
 
@@ -672,10 +655,7 @@ class TakeoutUploadService : Service() {
                                     aDone.incrementAndGet(); aErrors.incrementAndGet()
                                     liveLog("❌ ${item.fn}")
                                 }
-                                val nowMs = System.currentTimeMillis()
-                                if (nowMs - lastNotifyTime > 500 || aDone.get() >= total) {
-                                    progressCallback?.invoke(TakeoutProgress(aDone.get(), total, aErrors.get(), false, null, aDoneBytes.get(), aSkipped.get()))
-                                }
+                                progressCallback?.invoke(TakeoutProgress(aDone.get(), total, aErrors.get(), false, null, aDoneBytes.get(), aSkipped.get()))
                             } finally { item.tmpFile?.delete() }
                         }
                     }
