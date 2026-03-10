@@ -566,6 +566,22 @@ class MainActivity : AppCompatActivity() {
         v.findViewById<TextView>(R.id.tvTakeoutProgress).text = "분석 중..."
         v.findViewById<TextView>(R.id.tvTakeoutStatus).text = "백그라운드에서 ZIP 분석 중..."
 
+        // 분석 중 진행률 콜백 (프로그레스바 업데이트)
+        TakeoutUploadService.progressCallback = { progress ->
+            runOnUiThread {
+                val vv = takeoutView ?: return@runOnUiThread
+                if (progress.total > 0 && !progress.finished) {
+                    val pb = vv.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar)
+                    pb.isIndeterminate = false
+                    pb.max = progress.total
+                    pb.progress = progress.done
+                    val pct = if (progress.total > 0) progress.done * 100 / progress.total else 0
+                    val readMB = String.format("%.0f", progress.doneBytes / 1024.0 / 1024.0)
+                    vv.findViewById<TextView>(R.id.tvTakeoutProgress).text = "분석 중: $pct% (${readMB}MB)"
+                }
+            }
+        }
+
         // 분석 결과 콜백 설정
         TakeoutUploadService.analyzeCallback = fun(mediaCount: Int, totalSize: Long, scannedCount: Int) {
             val vv = takeoutView ?: return

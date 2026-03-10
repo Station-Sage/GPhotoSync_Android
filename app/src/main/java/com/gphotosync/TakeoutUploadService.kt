@@ -10,6 +10,27 @@ import kotlinx.coroutines.*
 import java.io.InputStream
 import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
 
+// 읽은 바이트 수를 추적하는 InputStream 래퍼
+class CountingInputStream(private val wrapped: InputStream) : InputStream() {
+    var bytesRead: Long = 0L
+        private set
+
+    override fun read(): Int {
+        val b = wrapped.read()
+        if (b != -1) bytesRead++
+        return b
+    }
+
+    override fun read(b: ByteArray, off: Int, len: Int): Int {
+        val n = wrapped.read(b, off, len)
+        if (n > 0) bytesRead += n
+        return n
+    }
+
+    override fun close() = wrapped.close()
+    override fun available() = wrapped.available()
+}
+
 class TakeoutUploadService : Service() {
 
     companion object {
@@ -266,9 +287,19 @@ class TakeoutUploadService : Service() {
                     notifyProgress("ZIP 분석 중...", 0, 0)
                 }
 
+                // ZIP 파일 크기 가져오기 (진행률 표시용)
+                var zipTotalBytes = 0L
+                try {
+                    contentResolver.openFileDescriptor(zipUri, "r")?.use { pfd ->
+                        zipTotalBytes = pfd.statSize
+                    }
+                } catch (_: Exception) {}
+                val zipSizeMB = if (zipTotalBytes > 0) String.format("%.0f", zipTotalBytes / 1024.0 / 1024.0) else "?"
+                liveLog("ZIP 파일 크기: ${zipSizeMB}MB")
+
                 // JSON + 미디어를 한 번의 스캔으로 처리
-                val inputStream = contentResolver.openInputStream(zipUri)
-                val zis = ZipArchiveInputStream(inputStream)
+                val countingStream = CountingInputStream(contentResolver.openInputStream(zipUri)!!)
+                val zis = ZipArchiveInputStream(countingStream)
                 var scannedCount = 0
                 var entry = zis.nextZipEntry
 
@@ -278,8 +309,14 @@ class TakeoutUploadService : Service() {
 
                         // 이어하기: 이전에 스캔한 파일은 건너뜀
                         if (scannedCount <= skipCount) {
-                            // ZIP 스트림 소비 (데이터를 읽어야 다음 엔트리 이동)
-                            try { zis.readBytes() } catch (_: Exception) {}
+                            // ZIP 스트림 드레인 (메모리에 올리지 않고 건너뜀)
+                            try {
+                                val buf = ByteArray(8192)
+                                while (zis.read(buf) != -1) { /* drain */ }
+                            } catch (_: Exception) {}
+                            if (scannedCount % 1000 == 0) {
+                                notifyProgress("이전 위치로 이동 중... ($scannedCount/$skipCount)", scannedCount, skipCount)
+                            }
                             entry = zis.nextZipEntry
                             continue
                         }
@@ -303,14 +340,37 @@ class TakeoutUploadService : Service() {
                                 val sz = entry.size
                                 if (sz > 0) totalSize += sz
                             }
+                            // 미디어 파일 스트림 드레인 (메모리에 올리지 않음)
+                            try {
+                                val buf = ByteArray(8192)
+                                while (zis.read(buf) != -1) { /* drain */ }
+                            } catch (_: Exception) {}
+                        } else {
+                            // 기타 파일도 드레인
+                            try {
+                                val buf = ByteArray(8192)
+                                while (zis.read(buf) != -1) { /* drain */ }
+                            } catch (_: Exception) {}
                         }
 
-                        // 500개마다 진행 상태 저장 + 알림
-                        if (scannedCount % 500 == 0) {
+                        // 100개마다 진행 상태 저장 + 알림
+                        if (scannedCount % 100 == 0) {
                             saveAnalyzeState(scannedCount, mediaCount, totalSize, jsonCount)
-                            saveJsonDateMap()
-                            notifyProgress("분석 중... (${scannedCount}개 스캔, 미디어 ${mediaCount}개, JSON ${jsonCount}개)", 0, 0)
-                            liveLog("분석 중: ${scannedCount}개 스캔, 미디어 ${mediaCount}개, JSON ${jsonCount}개")
+                            if (scannedCount % 500 == 0) saveJsonDateMap()
+                            val pctStr = if (zipTotalBytes > 0) {
+                                val pct = (countingStream.bytesRead * 100 / zipTotalBytes).toInt()
+                                " ($pct%)"
+                            } else ""
+                            val readMB = String.format("%.0f", countingStream.bytesRead / 1024.0 / 1024.0)
+                            notifyProgress("분석 중$pctStr ${readMB}MB/${zipSizeMB}MB | 파일${scannedCount}개, 미디어${mediaCount}개", 
+                                if (zipTotalBytes > 0) (countingStream.bytesRead / (1024 * 1024)).toInt() else 0, 
+                                if (zipTotalBytes > 0) (zipTotalBytes / (1024 * 1024)).toInt() else 0)
+                            liveLog("분석$pctStr: ${scannedCount}개 스캔, 미디어 ${mediaCount}개, JSON ${jsonCount}개")
+                            // progressCallback으로 UI 프로그레스바도 업데이트
+                            if (zipTotalBytes > 0) {
+                                val pctInt = (countingStream.bytesRead * 100 / zipTotalBytes).toInt()
+                                progressCallback?.invoke(TakeoutProgress(pctInt, 100, 0, false, null, countingStream.bytesRead, 0))
+                            }
                         }
                     }
                     entry = zis.nextZipEntry
@@ -474,8 +534,9 @@ class TakeoutUploadService : Service() {
                             val pct = if (total > 0) done * 100 / total else 0
                             notifyProgress("이어하기 ($pct%) - 스킵: $filename", done, total)
                             progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null, doneBytes, skipped))
-                            // ZIP 스트림에서 데이터를 읽어야 다음 엔트리로 넘어감
-                            zis.readBytes()
+                            // ZIP 스트림 드레인 (메모리에 올리지 않음)
+                            val buf = ByteArray(8192)
+                            while (zis.read(buf) != -1) { /* drain */ }
                             entry = zis.nextZipEntry
                             continue
                         }
