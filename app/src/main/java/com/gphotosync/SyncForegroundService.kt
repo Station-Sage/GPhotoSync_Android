@@ -150,6 +150,7 @@ class SyncForegroundService : Service() {
         if (!scope.isActive) return
 
         notifyProgress("선택된 사진 목록 가져오는 중...", 0, 0)
+        liveLog("선택된 사진 목록 가져오는 중...")
         var allItems: List<MediaItem> = emptyList()
         var listDone = false
         googleApi.listPickedMedia(sessionId!!,
@@ -170,12 +171,14 @@ class SyncForegroundService : Service() {
 
         progressDb.setTotalCount(total)
         notifyProgress("동기화 시작 (${total}개)", done, total)
+        liveLog("동기화 시작: 전체 ${total}개, 기존 동기화 ${synced.size}개")
 
         for (item in allItems) {
             if (!scope.isActive) break
 
             if (item.id in synced) {
                 done++; skipped++
+                liveLog("⏭ 중복 스킵: ${item.filename}")
                 progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped, totalBytes, doneBytes))
                 continue
             }
@@ -187,7 +190,7 @@ class SyncForegroundService : Service() {
 
             if (fileData == null) {
                 errors++; done++
-                logToFile("DOWNLOAD FAILED: ${item.filename}")
+                liveLog("❌ 다운로드 실패: ${item.filename}")
                 progressDb.addFailedRecord(SyncRecord(item.id, item.filename, "failed", "다운로드 실패", fileSize = 0))
                 progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped, totalBytes, doneBytes))
                 continue
@@ -221,7 +224,7 @@ class SyncForegroundService : Service() {
                 progressDb.saveSyncedFileSize(item.id, fileData!!.size.toLong())
                 progressDb.addSuccessRecord(SyncRecord(item.id, item.filename, "success", fileSize = fileData!!.size.toLong()))
                 progressDb.removeFailedRecord(item.id)
-                logToFile("UPLOAD OK: ${item.filename}")
+                liveLog("✅ 완료: ${item.filename} (${String.format("%.1f", fileData!!.size / 1024.0)}KB)")
                 doneBytes += fileData!!.size.toLong()
                 done++
                 val pct = if (total > 0) (done * 100 / total) else 0
@@ -229,7 +232,7 @@ class SyncForegroundService : Service() {
                 progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped, totalBytes, doneBytes))
             } else {
                 errors++; done++
-                logToFile("UPLOAD FAILED: ${item.filename}")
+                liveLog("❌ 실패: ${item.filename}")
                 progressDb.addFailedRecord(SyncRecord(item.id, item.filename, "failed", "업로드 실패", fileSize = fileData?.size?.toLong() ?: 0))
                 progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped, totalBytes, doneBytes))
             }
@@ -239,6 +242,7 @@ class SyncForegroundService : Service() {
         googleApi.deleteSession(sessionId!!)
 
         val msg = if (scope.isActive) "완료! 성공:${done - errors - skipped} 스킵:${skipped} 실패:${errors}" else "동기화 중단됨"
+        liveLog(msg)
         notifyProgress(msg, done, total)
         progressDb.setDoneCount(done)
         progressCallback?.invoke(SyncProgress(done, total, errors, true, null, skipped, totalBytes, doneBytes))
