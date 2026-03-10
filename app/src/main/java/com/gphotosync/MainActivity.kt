@@ -526,8 +526,8 @@ class MainActivity : AppCompatActivity() {
         v.findViewById<TextView>(R.id.tvTakeoutStatus).text = "백그라운드에서 ZIP 분석 중..."
 
         // 분석 결과 콜백 설정
-        TakeoutUploadService.analyzeCallback = { mediaCount, totalSize, scannedCount ->
-            val vv = takeoutView ?: return@analyzeCallback
+        TakeoutUploadService.analyzeCallback = fun(mediaCount: Int, totalSize: Long, scannedCount: Int) {
+            val vv = takeoutView ?: return
             vv.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar).visibility = View.GONE
             vv.findViewById<TextView>(R.id.tvTakeoutProgress).visibility = View.GONE
             if (mediaCount < 0) {
