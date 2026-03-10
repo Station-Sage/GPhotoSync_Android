@@ -78,11 +78,52 @@ class TakeoutUploadService : Service() {
         return ext in imageExtensions || ext in videoExtensions
     }
 
-    private fun extractYear(filename: String, path: String): String {
-        // 파일명에서 연도 추출 시도: 20xx 또는 19xx 패턴
-        val yearPattern = Regex("((?:19|20)\\d{2})")
-        yearPattern.find(filename)?.let { return it.groupValues[1] }
-        yearPattern.find(path)?.let { return it.groupValues[1] }
+    // JSON 메타데이터에서 읽은 날짜 맵: 파일명 -> "YYYY/MM"
+    private val jsonDateMap = mutableMapOf<String, String>()
+
+    private fun parseJsonMetadata(jsonContent: String): Pair<String, String>? {
+        // JSON에서 파일명과 촬영날짜 추출
+        try {
+            val json = org.json.JSONObject(jsonContent)
+            val title = json.optString("title", "")
+            
+            // photoTakenTime 우선, 없으면 creationTime
+            var timestamp = 0L
+            if (json.has("photoTakenTime")) {
+                timestamp = json.getJSONObject("photoTakenTime").optString("timestamp", "0").toLongOrNull() ?: 0L
+            }
+            if (timestamp == 0L && json.has("creationTime")) {
+                timestamp = json.getJSONObject("creationTime").optString("timestamp", "0").toLongOrNull() ?: 0L
+            }
+            
+            if (title.isNotEmpty() && timestamp > 0) {
+                val date = java.util.Date(timestamp * 1000)
+                val year = java.text.SimpleDateFormat("yyyy", java.util.Locale.getDefault()).format(date)
+                val month = java.text.SimpleDateFormat("MM", java.util.Locale.getDefault()).format(date)
+                return Pair(title, "$year/$month")
+            }
+        } catch (_: Exception) {}
+        return null
+    }
+
+    private fun extractYearMonth(filename: String, path: String): String {
+        // 1순위: JSON 메타데이터
+        jsonDateMap[filename]?.let { return it }
+        
+        // 2순위: 파일명에서 YYYY-MM 또는 YYYYMM 패턴
+        val ymPattern = Regex("((?:19|20)\d{2})[\-_]?(\d{2})[\-_]?\d{2}")
+        val match = ymPattern.find(filename) ?: ymPattern.find(path)
+        if (match != null) {
+            return "${match.groupValues[1]}/${match.groupValues[2]}"
+        }
+        
+        // 3순위: 연도만이라도
+        val yearPattern = Regex("((?:19|20)\d{2})")
+        val yearMatch = yearPattern.find(filename) ?: yearPattern.find(path)
+        if (yearMatch != null) {
+            return "${yearMatch.groupValues[1]}/unknown"
+        }
+        
         return "unknown"
     }
 
@@ -103,9 +144,38 @@ class TakeoutUploadService : Service() {
     private fun analyzeZip(zipUri: Uri, startDate: String?, endDate: String?) {
         job = scope.launch {
             try {
-                liveLog("ZIP 파일 분석 시작...")
-                notifyProgress("ZIP 분석 중...", 0, 0)
-
+                liveLog("ZIP 파일 분석 시작 - JSON 메타데이터 수집 중...")
+                notifyProgress("ZIP 분석 중 (메타데이터 수집)...", 0, 0)
+                
+                // 1단계: JSON 메타데이터 수집
+                jsonDateMap.clear()
+                var jsonCount = 0
+                try {
+                    val jsonInput = contentResolver.openInputStream(zipUri)
+                    val jsonZis = ZipArchiveInputStream(jsonInput)
+                    var jsonEntry = jsonZis.nextZipEntry
+                    while (jsonEntry != null && isActive) {
+                        if (!jsonEntry.isDirectory && jsonEntry.name.endsWith(".json")) {
+                            try {
+                                val jsonBytes = jsonZis.readBytes()
+                                val jsonStr = String(jsonBytes, Charsets.UTF_8)
+                                val result = parseJsonMetadata(jsonStr)
+                                if (result != null) {
+                                    jsonDateMap[result.first] = result.second
+                                    jsonCount++
+                                }
+                            } catch (_: Exception) {}
+                        }
+                        jsonEntry = jsonZis.nextZipEntry
+                    }
+                    jsonZis.close()
+                } catch (e: Exception) {
+                    liveLog("JSON 메타데이터 수집 중 오류 (계속 진행): ${e.message}")
+                }
+                liveLog("JSON 메타데이터 ${jsonCount}개 수집 완료")
+                notifyProgress("ZIP 분석 중 (미디어 스캔)...", 0, 0)
+                
+                // 2단계: 미디어 파일 스캔
                 val inputStream = contentResolver.openInputStream(zipUri)
                 val zis = ZipArchiveInputStream(inputStream)
                 var mediaCount = 0
@@ -159,6 +229,36 @@ class TakeoutUploadService : Service() {
 
         job = scope.launch {
             try {
+                // JSON 메타데이터가 비어있으면 먼저 수집
+                if (jsonDateMap.isEmpty()) {
+                    liveLog("JSON 메타데이터 수집 중...")
+                    notifyProgress("메타데이터 수집 중...", 0, 0)
+                    try {
+                        val jsonInput = contentResolver.openInputStream(zipUri)
+                        val jsonZis = ZipArchiveInputStream(jsonInput)
+                        var jsonEntry = jsonZis.nextZipEntry
+                        var jsonCount = 0
+                        while (jsonEntry != null && isActive) {
+                            if (!jsonEntry.isDirectory && jsonEntry.name.endsWith(".json")) {
+                                try {
+                                    val jsonBytes = jsonZis.readBytes()
+                                    val jsonStr = String(jsonBytes, Charsets.UTF_8)
+                                    val result = parseJsonMetadata(jsonStr)
+                                    if (result != null) {
+                                        jsonDateMap[result.first] = result.second
+                                        jsonCount++
+                                    }
+                                } catch (_: Exception) {}
+                            }
+                            jsonEntry = jsonZis.nextZipEntry
+                        }
+                        jsonZis.close()
+                        liveLog("JSON 메타데이터 ${jsonCount}개 수집 완료")
+                    } catch (e: Exception) {
+                        liveLog("JSON 수집 오류 (계속 진행): ${e.message}")
+                    }
+                }
+                
                 liveLog("ZIP 파일 분석 중...")
 
                 // 1단계: ZIP 내 미디어 파일 목록 수집
@@ -218,10 +318,10 @@ class TakeoutUploadService : Service() {
                 while (entry != null && isActive) {
                     if (!entry.isDirectory && entry.name in mediaNames) {
                         val filename = entry.name.substringAfterLast('/')
-                        val year = extractYear(filename, entry.name)
-                        val folderPath = "${oneDriveApi.rootFolder}/$year"
+                        val yearMonth = extractYearMonth(filename, entry.name)
+                        val folderPath = "${oneDriveApi.rootFolder}/$yearMonth"
 
-                        liveLog("처리 중: $filename ($year)")
+                        liveLog("처리 중: $filename ($yearMonth)")
 
                         // ZIP에서 파일 데이터 읽기
                         val fileData = zis.readBytes()

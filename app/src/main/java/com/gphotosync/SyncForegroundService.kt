@@ -215,7 +215,8 @@ class SyncForegroundService : Service() {
                 continue
             }
 
-            val folderPath = "${oneDriveApi.rootFolder}/${item.year}"
+            val yearMonth = extractYearMonth(item.filename, item.year)
+            val folderPath = "${oneDriveApi.rootFolder}/$yearMonth"
             var uploadDone = false
             var uploadOk = false
             logToFile("[SYNC] ensureFolder calling: $folderPath")
@@ -367,6 +368,16 @@ class SyncForegroundService : Service() {
             (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
                 .createNotificationChannel(channel)
         }
+    }
+
+    private fun extractYearMonth(filename: String, year: String): String {
+        val ymPattern = Regex("((?:19|20)\d{2})[\-_]?(\d{2})[\-_]?\d{2}")
+        val match = ymPattern.find(filename)
+        if (match != null) {
+            return "${match.groupValues[1]}/${match.groupValues[2]}"
+        }
+        // 월을 못 찾으면 연도만
+        return if (year != "unknown") "$year/unknown" else "unknown"
     }
 
     override fun onDestroy() {
