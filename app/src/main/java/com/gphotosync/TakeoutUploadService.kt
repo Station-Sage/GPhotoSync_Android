@@ -374,7 +374,7 @@ class TakeoutUploadService : Service() {
                         if (uOk) {
                             done++; doneBytes += data.size; uploaded.add(e4.name); saveUploadedFile(e4.name)
                             val pct = if (total > 0) done * 100 / total else 0
-                            liveLog("✅ $fn (${'$'}{String.format("%.1f", data.size/1024.0)}KB)")
+                            val sizeKB = String.format("%.1f", data.size / 1024.0); liveLog("✅ $fn (${sizeKB}KB)")
                             notifyProgress("업로드 $pct% - $fn", done, total)
                         } else { done++; errors++; liveLog("❌ $fn") }
 
