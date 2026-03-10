@@ -43,6 +43,45 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="1️⃣ Google Takeout에서 사진 내보내기"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="6dp" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Google Photos만 선택 → 내보내기 → ZIP 다운로드"
+                    android:textSize="11sp"
+                    android:textColor="?android:textColorSecondary"
+                    android:layout_marginBottom="8dp" />
+
+                <Button
+                    android:id="@+id/btnOpenTakeout"
+                    android:layout_width="match_parent"
+                    android:layout_height="40dp"
+                    android:text="🌐 Google Takeout 열기"
+                    android:textSize="13sp"
+                    android:backgroundTint="#4285F4" />
+
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="#22000000"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="12dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="2️⃣ 다운받은 ZIP 파일 선택"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
                 <Button
                     android:id="@+id/btnSelectZip"
                     android:layout_width="match_parent"

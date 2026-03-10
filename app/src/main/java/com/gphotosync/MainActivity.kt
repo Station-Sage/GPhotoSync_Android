@@ -465,6 +465,11 @@ class MainActivity : AppCompatActivity() {
     private fun setupTakeoutTab() {
         val v = takeoutView ?: return
 
+        v.findViewById<android.widget.Button>(R.id.btnOpenTakeout).setOnClickListener {
+            val url = "https://takeout.google.com/settings/takeout/custom/photo"
+            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }
+
         v.findViewById<android.widget.Button>(R.id.btnSelectZip).setOnClickListener {
             zipFilePicker.launch("application/zip")
         }
