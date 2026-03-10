@@ -24,8 +24,6 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.android.material.tabs.TabLayout
 import org.json.JSONObject
-import java.io.File
-import java.io.FileWriter
 
 class MainActivity : AppCompatActivity() {
 
