@@ -27,6 +27,8 @@ import java.util.Locale
 import java.io.File
 import java.io.FileWriter
 import java.util.zip.ZipInputStream
+import android.app.DatePickerDialog
+import java.util.Calendar
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -49,6 +51,8 @@ class MainActivity : AppCompatActivity() {
     private var takeoutView: View? = null
     private var selectedZipUri: android.net.Uri? = null
     private var takeoutLogLines = mutableListOf<String>()
+    private var filterStartDate: String? = null
+    private var filterEndDate: String? = null
 
     private val googleAuthLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -486,6 +490,21 @@ class MainActivity : AppCompatActivity() {
             v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = true
             v.findViewById<android.widget.Button>(R.id.btnStartTakeout).text = "🚀 OneDrive에 업로드"
         }
+
+        v.findViewById<android.widget.Button>(R.id.btnStartDate).setOnClickListener {
+            showDatePicker(true)
+        }
+        v.findViewById<android.widget.Button>(R.id.btnEndDate).setOnClickListener {
+            showDatePicker(false)
+        }
+        v.findViewById<android.widget.Button>(R.id.btnClearDate).setOnClickListener {
+            filterStartDate = null
+            filterEndDate = null
+            v.findViewById<android.widget.Button>(R.id.btnStartDate).text = "시작일 선택"
+            v.findViewById<android.widget.Button>(R.id.btnEndDate).text = "종료일 선택"
+            v.findViewById<TextView>(R.id.tvDateRange).text = "전체 기간 (필터 없음)"
+            selectedZipUri?.let { onZipSelected(it) }
+        }
     }
 
     private fun onZipSelected(uri: Uri) {
@@ -502,12 +521,26 @@ class MainActivity : AppCompatActivity() {
                 val imageExt = setOf("jpg","jpeg","png","gif","bmp","webp","heic","heif","tiff","tif","raw","cr2","nef","arw","dng")
                 val videoExt = setOf("mp4","mov","avi","mkv","wmv","flv","webm","m4v","3gp")
                 var entry = zis.nextEntry
+                val startD = filterStartDate
+                val endD = filterEndDate
+                val yearPattern = Regex("((?:19|20)\d{2})[\-_]?(\d{2})[\-_]?(\d{2})")
                 while (entry != null) {
                     if (!entry.isDirectory) {
                         val ext = entry.name.substringAfterLast('.', "").lowercase()
                         if (ext in imageExt || ext in videoExt) {
-                            mediaCount++
-                            totalSize += entry.size
+                            val fname = entry.name.substringAfterLast('/')
+                            val match = yearPattern.find(fname) ?: yearPattern.find(entry.name)
+                            val fileDate = if (match != null) "${match.groupValues[1]}-${match.groupValues[2]}-${match.groupValues[3]}" else null
+                            val inRange = when {
+                                fileDate == null -> startD == null && endD == null
+                                startD != null && fileDate < startD -> false
+                                endD != null && fileDate > endD -> false
+                                else -> true
+                            }
+                            if (inRange) {
+                                mediaCount++
+                                totalSize += entry.size
+                            }
                         }
                     }
                     zis.closeEntry()
@@ -541,6 +574,8 @@ class MainActivity : AppCompatActivity() {
         val intent = Intent(this, TakeoutUploadService::class.java)
         intent.action = TakeoutUploadService.ACTION_START
         intent.putExtra(TakeoutUploadService.EXTRA_ZIP_URI, uri.toString())
+        if (filterStartDate != null) intent.putExtra("start_date", filterStartDate)
+        if (filterEndDate != null) intent.putExtra("end_date", filterEndDate)
         startForegroundService(intent)
     }
 
@@ -572,6 +607,25 @@ class MainActivity : AppCompatActivity() {
         } else {
             tvStatus.text = "업로드 중..."
         }
+    }
+
+    private fun showDatePicker(isStart: Boolean) {
+        val cal = Calendar.getInstance()
+        DatePickerDialog(this, { _, year, month, day ->
+            val date = String.format("%04d-%02d-%02d", year, month + 1, day)
+            val v = takeoutView ?: return@DatePickerDialog
+            if (isStart) {
+                filterStartDate = date
+                v.findViewById<android.widget.Button>(R.id.btnStartDate).text = date
+            } else {
+                filterEndDate = date
+                v.findViewById<android.widget.Button>(R.id.btnEndDate).text = date
+            }
+            val start = filterStartDate ?: "처음"
+            val end = filterEndDate ?: "끝"
+            v.findViewById<TextView>(R.id.tvDateRange).text = "$start ~ $end"
+            selectedZipUri?.let { onZipSelected(it) }
+        }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
     }
 
     private fun appendTakeoutLog(line: String) {

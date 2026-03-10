@@ -59,6 +59,64 @@
                     android:textSize="12sp"
                     android:textColor="?android:textColorSecondary"
                     android:layout_marginTop="8dp" />
+                <View
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:background="#22000000"
+                    android:layout_marginTop="12dp"
+                    android:layout_marginBottom="12dp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="📅 날짜 범위 필터 (선택사항)"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="8dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:layout_marginBottom="4dp">
+                    <Button
+                        android:id="@+id/btnStartDate"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:text="시작일 선택"
+                        android:textSize="11sp"
+                        android:layout_marginEnd="4dp"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+                    <Button
+                        android:id="@+id/btnEndDate"
+                        android:layout_width="0dp"
+                        android:layout_height="40dp"
+                        android:layout_weight="1"
+                        android:text="종료일 선택"
+                        android:textSize="11sp"
+                        android:layout_marginStart="4dp"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvDateRange"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="전체 기간 (필터 없음)"
+                    android:textSize="11sp"
+                    android:textColor="?android:textColorSecondary"
+                    android:gravity="center"
+                    android:layout_marginBottom="4dp" />
+
+                <Button
+                    android:id="@+id/btnClearDate"
+                    android:layout_width="match_parent"
+                    android:layout_height="32dp"
+                    android:text="날짜 필터 초기화"
+                    android:textSize="10sp"
+                    style="@style/Widget.MaterialComponents.Button.TextButton" />
+
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 

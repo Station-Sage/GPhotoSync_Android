@@ -37,8 +37,10 @@ class TakeoutUploadService : Service() {
         when (intent?.action) {
             ACTION_START -> {
                 val uriStr = intent.getStringExtra(EXTRA_ZIP_URI) ?: return START_NOT_STICKY
+                val startDate = intent.getStringExtra("start_date")
+                val endDate = intent.getStringExtra("end_date")
                 startForeground(NOTIF_ID, buildNotification("Takeout 업로드 준비 중...", 0, 0))
-                startUpload(Uri.parse(uriStr))
+                startUpload(Uri.parse(uriStr), startDate, endDate)
             }
             ACTION_STOP -> {
                 job?.cancel()
@@ -75,7 +77,21 @@ class TakeoutUploadService : Service() {
         return "unknown"
     }
 
-    private fun startUpload(zipUri: Uri) {
+    private fun extractDateFromName(filename: String, path: String): String? {
+        val pattern = Regex("((?:19|20)\d{2})[\-_]?(\d{2})[\-_]?(\d{2})")
+        val match = pattern.find(filename) ?: pattern.find(path) ?: return null
+        return "${match.groupValues[1]}-${match.groupValues[2]}-${match.groupValues[3]}"
+    }
+
+    private fun isInDateRange(fileDate: String?, startDate: String?, endDate: String?): Boolean {
+        if (startDate == null && endDate == null) return true
+        if (fileDate == null) return false
+        if (startDate != null && fileDate < startDate) return false
+        if (endDate != null && fileDate > endDate) return false
+        return true
+    }
+
+    private fun startUpload(zipUri: Uri, startDate: String? = null, endDate: String? = null) {
         val oneDriveApi = OneDriveApi(this)
 
         job = scope.launch {
@@ -91,7 +107,11 @@ class TakeoutUploadService : Service() {
                     var entry = zis.nextEntry
                     while (entry != null && isActive) {
                         if (!entry.isDirectory && isMediaFile(entry.name)) {
-                            mediaEntries.add(Pair(entry.name, entry.size))
+                            val fname = entry.name.substringAfterLast('/')
+                            val fileDate = extractDateFromName(fname, entry.name)
+                            if (isInDateRange(fileDate, startDate, endDate)) {
+                                mediaEntries.add(Pair(entry.name, entry.size))
+                            }
                         }
                         zis.closeEntry()
                         entry = zis.nextEntry
@@ -112,7 +132,13 @@ class TakeoutUploadService : Service() {
                     return@launch
                 }
 
-                liveLog("미디어 파일 ${total}개 발견. 업로드 시작...")
+                val rangeMsg = when {
+                    startDate != null && endDate != null -> " ($startDate ~ $endDate)"
+                    startDate != null -> " ($startDate ~ )"
+                    endDate != null -> " ( ~ $endDate)"
+                    else -> ""
+                }
+                liveLog("미디어 파일 ${total}개 발견$rangeMsg. 업로드 시작...")
                 notifyProgress("업로드 시작 (${total}개)", 0, total)
                 progressCallback?.invoke(TakeoutProgress(0, total, 0, false, null))
 
