@@ -215,7 +215,7 @@ class TakeoutTabHelper(
                 takeoutView.findViewById<Button>(R.id.btnOrganizeAlbums)?.isEnabled = true
                 if (total > 0) {
                     appendTakeoutLog("앨범 정리 완료: 복사 $copied, 실패 $errors (전체 $total)")
-                    takeoutView.findViewById<TextView>(R.id.tvTakeoutStatus).text = "앨범 정리 완료! $copied개 복사"
+                    takeoutView.findViewById<TextView>(R.id.tvTakeoutStatus).text = "앨범 정리 완료! ${copied}개 복사"
                 }
             }
 
