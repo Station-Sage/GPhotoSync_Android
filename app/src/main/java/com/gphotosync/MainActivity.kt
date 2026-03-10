@@ -462,6 +462,89 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ======== TAKEOUT TAB ========
+    private fun restoreTakeoutState() {
+        val v = takeoutView ?: return
+
+        // 로그 복원
+        if (takeoutLogLines.isNotEmpty()) {
+            v.findViewById<TextView>(R.id.tvTakeoutLog).text = takeoutLogLines.joinToString("\n")
+            val sv = v.findViewById<ScrollView>(R.id.scrollTakeoutLog)
+            sv.post { sv.fullScroll(View.FOCUS_DOWN) }
+        }
+
+        // ZIP 선택 상태 복원
+        if (selectedZipUri != null) {
+            v.findViewById<TextView>(R.id.tvZipInfo)?.text = lastZipInfoText
+        }
+
+        // 날짜 필터 복원
+        if (filterStartDate != null) {
+            v.findViewById<android.widget.Button>(R.id.btnStartDate)?.text = filterStartDate
+        }
+        if (filterEndDate != null) {
+            v.findViewById<android.widget.Button>(R.id.btnEndDate)?.text = filterEndDate
+        }
+        if (filterStartDate != null || filterEndDate != null) {
+            val start = filterStartDate ?: "처음"
+            val end = filterEndDate ?: "끝"
+            v.findViewById<TextView>(R.id.tvDateRange)?.text = "$start ~ $end"
+        }
+
+        // 분석 중 상태 복원
+        if (isTakeoutAnalyzing) {
+            val pb = v.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar)
+            pb.visibility = View.VISIBLE
+            v.findViewById<TextView>(R.id.tvTakeoutProgress).visibility = View.VISIBLE
+            v.findViewById<TextView>(R.id.tvTakeoutProgress).text = lastAnalyzeStatusText
+            v.findViewById<TextView>(R.id.tvTakeoutStatus).visibility = View.VISIBLE
+            v.findViewById<TextView>(R.id.tvTakeoutStatus).text = "백그라운드에서 ZIP 분석 중..."
+            v.findViewById<android.widget.Button>(R.id.btnStopAnalyze).visibility = View.VISIBLE
+            v.findViewById<android.widget.Button>(R.id.btnResumeAnalyze).visibility = View.GONE
+            v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = false
+            // 프로그레스바 값 복원
+            val p = lastTakeoutProgress
+            if (p != null && p.total > 0) {
+                pb.isIndeterminate = false
+                pb.max = p.total
+                pb.progress = p.done
+            }
+            return
+        }
+
+        // 업로드 중 상태 복원
+        if (isTakeoutUploading) {
+            val pb = v.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar)
+            pb.visibility = View.VISIBLE
+            v.findViewById<TextView>(R.id.tvTakeoutProgress).visibility = View.VISIBLE
+            v.findViewById<TextView>(R.id.tvTakeoutStatus).visibility = View.VISIBLE
+            v.findViewById<android.widget.Button>(R.id.btnStopTakeout).visibility = View.VISIBLE
+            v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = false
+            val p = lastTakeoutProgress
+            if (p != null && p.total > 0) {
+                pb.isIndeterminate = false
+                pb.max = p.total
+                pb.progress = p.done
+                val pct = p.done * 100 / p.total
+                val doneMB = String.format("%.1f", p.doneBytes / 1024.0 / 1024.0)
+                v.findViewById<TextView>(R.id.tvTakeoutProgress).text = "${p.done}/${p.total} ($pct%) | ${doneMB}MB"
+            }
+            v.findViewById<TextView>(R.id.tvTakeoutStatus).text = "업로드 중..."
+            return
+        }
+
+        // 분석 완료 후 업로드 대기 상태 복원
+        if (selectedZipUri != null && !isTakeoutAnalyzing && !isTakeoutUploading) {
+            v.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar).visibility = View.GONE
+            v.findViewById<TextView>(R.id.tvTakeoutStatus).text = lastTakeoutStatusText
+            // 이어하기 버튼 상태 복원
+            val hasResumable = v.context.getSharedPreferences("takeout_progress", 0)
+                .getStringSet("uploaded_files", emptySet())?.isNotEmpty() == true
+            if (hasResumable) {
+                v.findViewById<android.widget.Button>(R.id.btnResumeTakeout).visibility = View.VISIBLE
+            }
+        }
+    }
+
     private fun setupTakeoutTab() {
         val v = takeoutView ?: return
 
@@ -610,19 +693,19 @@ class MainActivity : AppCompatActivity() {
                 // 분석 중단됨
                 vv.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar).visibility = View.GONE
                 vv.findViewById<TextView>(R.id.tvTakeoutProgress).visibility = View.GONE
-                vv.findViewById<TextView>(R.id.tvZipInfo).text = "분석 중단됨 (${scannedCount}개 스캔 완료)"
+                val zipInfoText3 = "분석 중단됨 (${scannedCount}개 스캔 완료)"; vv.findViewById<TextView>(R.id.tvZipInfo).text = zipInfoText3; lastZipInfoText = zipInfoText3
                 vv.findViewById<TextView>(R.id.tvTakeoutStatus).text = "이어하기 버튼으로 재개할 수 있습니다"
                 vv.findViewById<android.widget.Button>(R.id.btnResumeAnalyze).visibility = View.VISIBLE
                 vv.findViewById<android.widget.Button>(R.id.btnStopAnalyze).visibility = View.GONE
                 appendTakeoutLog("분석 중단됨 - 이어하기 가능")
                 return
             } else if (mediaCount < 0) {
-                vv.findViewById<TextView>(R.id.tvZipInfo).text = "ZIP 분석 실패"
+                val zipInfoText1 = "ZIP 분석 실패"; vv.findViewById<TextView>(R.id.tvZipInfo).text = zipInfoText1; lastZipInfoText = zipInfoText1
                 appendTakeoutLog("ZIP 분석 실패")
             } else {
                 val sizeMB = String.format("%.1f", totalSize / 1024.0 / 1024.0)
                 val sizeText = if (totalSize > 0) " (약 ${sizeMB}MB)" else ""
-                vv.findViewById<TextView>(R.id.tvZipInfo).text = "미디어 파일: ${mediaCount}개${sizeText} (전체 ${scannedCount}개 스캔)"
+                val zipInfoText2 = "미디어 파일: ${mediaCount}개${sizeText} (전체 ${scannedCount}개 스캔)"; vv.findViewById<TextView>(R.id.tvZipInfo).text = zipInfoText2; lastZipInfoText = zipInfoText2
                 vv.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = mediaCount > 0
                 appendTakeoutLog("분석 완료: 미디어 ${mediaCount}개 발견 (전체 ${scannedCount}개 파일)")
                 if (mediaCount == 0) {
@@ -726,9 +809,9 @@ class MainActivity : AppCompatActivity() {
                 if (hasResumable && progress.errorMessage?.contains("중단") == true) View.VISIBLE else View.GONE
             val success = progress.done - progress.errors - progress.skipped
             if (progress.errorMessage != null) {
-                tvStatus.text = "오류: ${progress.errorMessage}"
+                val errSt = "오류: ${progress.errorMessage}"; tvStatus.text = errSt; lastTakeoutStatusText = errSt
             } else {
-                tvStatus.text = "완료! 성공:${success} 스킵:${progress.skipped} 실패:${progress.errors}"
+                val st = "완료! 성공:${success} 스킵:${progress.skipped} 실패:${progress.errors}"; tvStatus.text = st; lastTakeoutStatusText = st
             }
         } else {
             tvStatus.text = "업로드 중..."
