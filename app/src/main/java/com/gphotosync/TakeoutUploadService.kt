@@ -111,14 +111,14 @@ class TakeoutUploadService : Service() {
         jsonDateMap[filename]?.let { return it }
         
         // 2순위: 파일명에서 YYYY-MM 또는 YYYYMM 패턴
-        val ymPattern = Regex("((?:19|20)\d{2})[\-_]?(\d{2})[\-_]?\d{2}")
+        val ymPattern = Regex("""((?:19|20)\d{2})[-_]?(\d{2})[-_]?\d{2}""")
         val match = ymPattern.find(filename) ?: ymPattern.find(path)
         if (match != null) {
             return "${match.groupValues[1]}/${match.groupValues[2]}"
         }
         
         // 3순위: 연도만이라도
-        val yearPattern = Regex("((?:19|20)\d{2})")
+        val yearPattern = Regex("""((?:19|20)\d{2})""")
         val yearMatch = yearPattern.find(filename) ?: yearPattern.find(path)
         if (yearMatch != null) {
             return "${yearMatch.groupValues[1]}/unknown"

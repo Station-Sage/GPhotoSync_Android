@@ -371,7 +371,7 @@ class SyncForegroundService : Service() {
     }
 
     private fun extractYearMonth(filename: String, year: String): String {
-        val ymPattern = Regex("((?:19|20)\d{2})[\-_]?(\d{2})[\-_]?\d{2}")
+        val ymPattern = Regex("""((?:19|20)\d{2})[-_]?(\d{2})[-_]?\d{2}""")
         val match = ymPattern.find(filename)
         if (match != null) {
             return "${match.groupValues[1]}/${match.groupValues[2]}"
