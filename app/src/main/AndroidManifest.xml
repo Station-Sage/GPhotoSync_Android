@@ -52,11 +52,11 @@
 
         <service
             android:name=".SyncForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <service
             android:name=".TakeoutUploadService"
-            android:exported="false"
-            android:foregroundServiceType="dataSync" />
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
