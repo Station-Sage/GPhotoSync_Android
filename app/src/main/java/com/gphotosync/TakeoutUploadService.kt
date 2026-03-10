@@ -70,7 +70,9 @@ class TakeoutUploadService : Service() {
     // === OkHttp 콜백 → suspend 변환 ===
     private suspend fun ensureFolderSuspend(api: OneDriveApi, path: String): Boolean {
         for (attempt in 1..3) {
+            liveLog("[DEBUG] 폴더 생성 시도 $attempt/3: $path")
             val ok = suspendCoroutine<Boolean> { cont -> api.ensureFolder(path) { cont.resume(it) } }
+            liveLog("[DEBUG] 폴더 생성 결과 $attempt/3: $path -> $ok")
             if (ok) return true
             if (attempt < 3) {
                 liveLog("⚠ 폴더 생성 재시도 $attempt/3: $path")
