@@ -187,7 +187,7 @@ class TakeoutUploadService : Service() {
         for (i in 0 until p.getInt("c", 0)) {
             val k = p.getString("k$i", null) ?: continue
             val v = p.getString("v$i", null) ?: continue
-            jsonDateMap[k] = v
+            jsonDateMap[k] = v.substringBefore("/") // 연도만 유지 (이전 버전 호환)
         }
     }
 
@@ -329,7 +329,8 @@ class TakeoutUploadService : Service() {
 
     private fun yearOnly(filename: String, path: String): String {
         jsonDateMap[filename]?.let {
-            return it
+            // 이전 버전 호환: "2015/05" 형태면 연도만 추출
+            return it.substringBefore("/")
         }
         val yr = Regex("""((?:19|20)\d{2})""")
         (yr.find(filename) ?: yr.find(path))?.let { return it.groupValues[1] }
