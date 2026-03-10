@@ -2,6 +2,7 @@ package com.gphotosync
 
 import android.content.Context
 import okhttp3.*
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
@@ -284,8 +285,7 @@ class OneDriveApi(private val context: Context) {
             val encodedPath = filePath.trim('/').split("/").joinToString("/") {
                 URLEncoder.encode(it, "UTF-8").replace("+", "%20")
             }
-            val itemUrl = "$GRAPH/me/drive/root:/$encodedPath"
-            val httpUrl = okhttp3.HttpUrl.parse(itemUrl)!!.newBuilder()
+            val httpUrl = "$GRAPH/me/drive/root:/$encodedPath".toHttpUrl().newBuilder()
                 .addQueryParameter("\$select", "id")
                 .build()
             val req = Request.Builder()
