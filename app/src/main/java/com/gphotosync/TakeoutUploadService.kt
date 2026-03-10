@@ -632,22 +632,22 @@ class TakeoutUploadService : Service() {
             try {
                 // JSON 메타데이터 로드 (분석에서 이미 수집된 경우)
                 if (jsonDateMap.isEmpty()) loadJsonDateMap()
+                if (jsonDateMap.isEmpty()) {
                     liveLog("JSON 메타데이터 수집 중...")
-                        notifyProgress("메타데이터 수집 중...", 0, 0)
-                        val cs2 = contentResolver.openInputStream(zipUri)
-                        val zis2 = ZipArchiveInputStream(cs2)
-                        var je = zis2.nextZipEntry; var jc = 0
-                        while (je != null && isActive) {
-                            if (!je.isDirectory && je.name.endsWith(".json")) {
-                                val js = readJsonSafe(zis2)
-                                if (js != null) { parseJsonMeta(js)?.let { jsonDateMap[it.first] = it.second; jc++ } }
-                            } else { drain(zis2) }
-                            je = zis2.nextZipEntry
-                        }
-                        zis2.close()
-                        saveJsonDateMap()
-                        liveLog("JSON ${jc}개 수집 완료")
+                    notifyProgress("메타데이터 수집 중...", 0, 0)
+                    val cs2 = contentResolver.openInputStream(zipUri)
+                    val zis2 = ZipArchiveInputStream(cs2)
+                    var je = zis2.nextZipEntry; var jc = 0
+                    while (je != null && isActive) {
+                        if (!je.isDirectory && je.name.endsWith(".json")) {
+                            val js = readJsonSafe(zis2)
+                            if (js != null) { parseJsonMeta(js)?.let { jsonDateMap[it.first] = it.second; jc++ } }
+                        } else { drain(zis2) }
+                        je = zis2.nextZipEntry
                     }
+                    zis2.close()
+                    saveJsonDateMap()
+                    liveLog("JSON ${jc}개 수집 완료")
                 }
 
                 // 분석에서 저장된 미디어 목록 로드
@@ -677,7 +677,6 @@ class TakeoutUploadService : Service() {
                     stopSelf(); return@launch
                 }
 
-                val uploadStartTime = System.currentTimeMillis()
                 val uploadStartTime = System.currentTimeMillis()
                 liveLog("미디어 ${total}개. 업로드 시작...")
                 notifyProgress("업로드 시작 (${total}개)", 0, total)
