@@ -115,12 +115,7 @@ class MainActivity : AppCompatActivity() {
             runOnUiThread { appendLiveLog(line) }
         }
 
-        TakeoutUploadService.progressCallback = { progress ->
-            runOnUiThread { updateTakeoutProgress(progress) }
-        }
-        TakeoutUploadService.logCallback = { line ->
-            runOnUiThread { appendTakeoutLog(line) }
-        }
+        setupTakeoutCallbacks()
     }
 
     private fun applySavedTheme() {
@@ -469,6 +464,39 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ======== TAKEOUT TAB ========
+    private fun setupTakeoutCallbacks() {
+        if (isTakeoutAnalyzing) {
+            // 분석용 콜백
+            TakeoutUploadService.progressCallback = { progress ->
+                runOnUiThread {
+                    lastTakeoutProgress = progress
+                    val vv = takeoutView ?: return@runOnUiThread
+                    if (progress.total > 0 && !progress.finished) {
+                        val pb = vv.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar)
+                        pb.visibility = View.VISIBLE
+                        pb.isIndeterminate = false
+                        pb.max = progress.total
+                        pb.progress = progress.done
+                        val pct = if (progress.total > 0) progress.done * 100 / progress.total else 0
+                        val readMB = String.format("%.0f", progress.doneBytes / 1024.0 / 1024.0)
+                        val analyzeText = "분석 중: $pct% (${readMB}MB)"
+                        vv.findViewById<TextView>(R.id.tvTakeoutProgress).visibility = View.VISIBLE
+                        vv.findViewById<TextView>(R.id.tvTakeoutProgress).text = analyzeText
+                        lastAnalyzeStatusText = analyzeText
+                    }
+                }
+            }
+        } else {
+            // 업로드용 콜백
+            TakeoutUploadService.progressCallback = { progress ->
+                runOnUiThread { updateTakeoutProgress(progress) }
+            }
+        }
+        TakeoutUploadService.logCallback = { line ->
+            runOnUiThread { appendTakeoutLog(line) }
+        }
+    }
+
     private fun restorePreviousSession(v: View) {
         val prefs = getSharedPreferences("takeout_session", MODE_PRIVATE)
         val savedUri = prefs.getString("zip_uri", null)
@@ -722,24 +750,10 @@ class MainActivity : AppCompatActivity() {
         v.findViewById<TextView>(R.id.tvTakeoutProgress).text = "분석 중..."
         v.findViewById<TextView>(R.id.tvTakeoutStatus).text = "백그라운드에서 ZIP 분석 중..."
 
-        // 분석 중 진행률 콜백 (프로그레스바 업데이트)
-        TakeoutUploadService.progressCallback = { progress ->
-            runOnUiThread {
-                val vv = takeoutView ?: return@runOnUiThread
-                if (progress.total > 0 && !progress.finished) {
-                    val pb = vv.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar)
-                    pb.isIndeterminate = false
-                    pb.max = progress.total
-                    pb.progress = progress.done
-                    val pct = if (progress.total > 0) progress.done * 100 / progress.total else 0
-                    val readMB = String.format("%.0f", progress.doneBytes / 1024.0 / 1024.0)
-                    val analyzeText = "분석 중: $pct% (${readMB}MB)"
-                    vv.findViewById<TextView>(R.id.tvTakeoutProgress).text = analyzeText
-                    lastAnalyzeStatusText = analyzeText
-                    lastTakeoutProgress = progress
-                }
-            }
-        }
+        // 분석용 콜백 설정
+        isTakeoutAnalyzing = true
+        isTakeoutUploading = false
+        setupTakeoutCallbacks()
 
         // 분석 결과 콜백 설정
         TakeoutUploadService.analyzeCallback = fun(mediaCount: Int, totalSize: Long, scannedCount: Int) {
@@ -773,9 +787,6 @@ class MainActivity : AppCompatActivity() {
             vv.findViewById<TextView>(R.id.tvTakeoutStatus).text = "ZIP 파일을 선택 후 업로드하세요"
         }
 
-        isTakeoutAnalyzing = true
-        isTakeoutUploading = false
-
         // 분석 중단 버튼 표시
         v.findViewById<android.widget.Button>(R.id.btnStopAnalyze).visibility = View.VISIBLE
         v.findViewById<android.widget.Button>(R.id.btnResumeAnalyze).visibility = View.GONE
@@ -791,13 +802,9 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun resumeTakeoutUpload(uri: Uri) {
-        // 업로드용 콜백 재설정
-        TakeoutUploadService.progressCallback = { progress ->
-            runOnUiThread { updateTakeoutProgress(progress) }
-        }
-        TakeoutUploadService.logCallback = { line ->
-            runOnUiThread { appendTakeoutLog(line) }
-        }
+        isTakeoutUploading = true
+        isTakeoutAnalyzing = false
+        setupTakeoutCallbacks()
         takeoutLogLines.clear()
         val v = takeoutView ?: return
         v.findViewById<TextView>(R.id.tvTakeoutLog).text = ""
@@ -819,13 +826,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startTakeoutUpload(uri: Uri) {
-        // 업로드용 콜백 재설정
-        TakeoutUploadService.progressCallback = { progress ->
-            runOnUiThread { updateTakeoutProgress(progress) }
-        }
-        TakeoutUploadService.logCallback = { line ->
-            runOnUiThread { appendTakeoutLog(line) }
-        }
+        isTakeoutUploading = true
+        isTakeoutAnalyzing = false
+        setupTakeoutCallbacks()
         takeoutLogLines.clear()
         val v = takeoutView ?: return
         v.findViewById<TextView>(R.id.tvTakeoutLog).text = ""
@@ -1179,7 +1182,9 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateAuthUI()
-        // 다른 앱에서 돌아왔을 때 현재 Takeout 탭이면 상태 복원
+        // 콜백 재설정 (다른 앱에서 돌아왔을 때)
+        setupTakeoutCallbacks()
+        // 현재 Takeout 탭이면 상태 복원
         val tabLayout = findViewById<TabLayout>(R.id.tabLayout)
         if (tabLayout.selectedTabPosition == 3) {
             restoreTakeoutState()
