@@ -170,16 +170,16 @@ class TakeoutUploadService : Service() {
     private fun yearMonth(filename: String, path: String): String {
         jsonDateMap[filename]?.let { return it }
         val ym = Regex("""((?:19|20)\d{2})[-_]?(\d{2})[-_]?\d{2}""")
-        (ym.find(filename) ?: ym.find(path))?.let { return "${'$'}{it.groupValues[1]}/${'$'}{it.groupValues[2]}" }
+        (ym.find(filename) ?: ym.find(path))?.let { return "${it.groupValues[1]}/${it.groupValues[2]}" }
         val yr = Regex("""((?:19|20)\d{2})""")
-        (yr.find(filename) ?: yr.find(path))?.let { return "${'$'}{it.groupValues[1]}/unknown" }
+        (yr.find(filename) ?: yr.find(path))?.let { return "${it.groupValues[1]}/unknown" }
         return "unknown"
     }
 
     private fun dateFromName(filename: String, path: String): String? {
         val p = Regex("""((?:19|20)\d{2})[-_]?(\d{2})[-_]?(\d{2})""")
         val m = p.find(filename) ?: p.find(path) ?: return null
-        return "${'$'}{m.groupValues[1]}-${'$'}{m.groupValues[2]}-${'$'}{m.groupValues[3]}"
+        return "${m.groupValues[1]}-${m.groupValues[2]}-${m.groupValues[3]}"
     }
 
     private fun inRange(fd: String?, s: String?, e: String?): Boolean {
@@ -200,7 +200,7 @@ class TakeoutUploadService : Service() {
                     val st = loadAnalyzeState()
                     skipCount = st[0].toInt(); mediaCount = st[1].toInt(); totalSize = st[2]; jsonCount = st[3].toInt()
                     loadJsonDateMap()
-                    liveLog("분석 이어하기: ${'$'}skipCount개부터 재개 (미디어 ${'$'}mediaCount, JSON ${'$'}jsonCount)")
+                    liveLog("분석 이어하기: $skipCount개부터 재개 (미디어 $mediaCount, JSON $jsonCount)")
                 } else {
                     clearAnalyzeState(); jsonDateMap.clear()
                     liveLog("ZIP 파일 분석 시작...")
@@ -239,7 +239,7 @@ class TakeoutUploadService : Service() {
                             drain(zis)
                         }
 
-                        if (sc.rem(100) == 0) {
+                        if (sc.rem(50) == 0) {
                             saveAnalyzeState(sc, mediaCount, totalSize, jsonCount)
                             if (sc.rem(500) == 0) saveJsonDateMap()
                             val pct = if (zipBytes > 0) (cs.bytesRead * 100 / zipBytes).toInt() else 0
@@ -255,9 +255,12 @@ class TakeoutUploadService : Service() {
                 }
                 zis.close()
 
+                // 루프 종료 시 항상 최신 상태 저장
+                saveAnalyzeState(sc, mediaCount, totalSize, jsonCount)
+                saveJsonDateMap()
+
                 if (!isActive) {
-                    saveAnalyzeState(sc, mediaCount, totalSize, jsonCount); saveJsonDateMap()
-                    liveLog("분석 중단 (${sc}개 스캔, 이어하기 가능)")
+                    liveLog("분석 중단 (${sc}개 스캔 완료, 이어하기 가능)")
                     android.os.Handler(android.os.Looper.getMainLooper()).post { analyzeCallback?.invoke(-2, totalSize, sc) }
                     stopForeground(STOP_FOREGROUND_DETACH); stopSelf(); return@launch
                 }
@@ -268,11 +271,13 @@ class TakeoutUploadService : Service() {
                 android.os.Handler(android.os.Looper.getMainLooper()).post { analyzeCallback?.invoke(mediaCount, totalSize, sc) }
                 stopForeground(STOP_FOREGROUND_DETACH); stopSelf()
             } catch (e: CancellationException) {
+                // 중단 시 마지막 상태 저장 (sc는 접근 불가하므로 이미 100개 단위로 저장된 상태 유지)
+                saveJsonDateMap()
                 liveLog("분석 중단됨 (이어하기 가능)")
                 android.os.Handler(android.os.Looper.getMainLooper()).post { analyzeCallback?.invoke(-2, 0L, 0) }
                 stopForeground(STOP_FOREGROUND_DETACH); stopSelf()
             } catch (e: Exception) {
-                liveLog("ZIP 분석 실패: ${'$'}{e.message}")
+                liveLog("ZIP 분석 실패: ${e.message}")
                 android.os.Handler(android.os.Looper.getMainLooper()).post { analyzeCallback?.invoke(-1, 0L, 0) }
                 stopForeground(STOP_FOREGROUND_DETACH); stopSelf()
             }
@@ -329,7 +334,7 @@ class TakeoutUploadService : Service() {
                 progressCallback?.invoke(TakeoutProgress(0, total, 0, false, null))
 
                 val uploaded = if (resume) getUploadedFiles() else { clearUploadedFiles(); mutableSetOf() }
-                if (resume && uploaded.isNotEmpty()) liveLog("이어하기: ${'$'}{uploaded.size}개 스킵")
+                if (resume && uploaded.isNotEmpty()) liveLog("이어하기: ${uploaded.size}개 스킵")
 
                 var done = 0; var errors = 0; var skipped = 0; var doneBytes = 0L
                 val zis4 = ZipArchiveInputStream(contentResolver.openInputStream(zipUri))
@@ -339,7 +344,7 @@ class TakeoutUploadService : Service() {
                     if (!e4.isDirectory && e4.name in mediaNames) {
                         val fn = e4.name.substringAfterLast('/')
                         val ym = yearMonth(fn, e4.name)
-                        val fp = "${'$'}{api.rootFolder}/$ym"
+                        val fp = "${api.rootFolder}/$ym"
 
                         if (e4.name in uploaded) {
                             done++; skipped++
@@ -396,7 +401,7 @@ class TakeoutUploadService : Service() {
                 progressCallback?.invoke(TakeoutProgress(0,0,0,true,"중단됨 - 이어하기 가능"))
                 stopForeground(STOP_FOREGROUND_DETACH); stopSelf()
             } catch (e: Exception) {
-                liveLog("오류: ${'$'}{e.message}")
+                liveLog("오류: ${e.message}")
                 progressCallback?.invoke(TakeoutProgress(0,0,0,true,e.message))
                 stopForeground(STOP_FOREGROUND_DETACH); stopSelf()
             }
