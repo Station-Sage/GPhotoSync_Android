@@ -141,10 +141,24 @@ class TakeoutUploadService : Service() {
 
     private fun getUploadedFiles(): MutableSet<String> =
         getSharedPreferences("takeout_progress", MODE_PRIVATE).getStringSet("uf", emptySet())?.toMutableSet() ?: mutableSetOf()
-    private fun saveUploadedFile(name: String) {
+    private var pendingUploaded = mutableSetOf<String>()
+    private var lastFlushTime = 0L
+
+    private fun addUploadedFile(name: String) {
+        pendingUploaded.add(name)
+        val now = System.currentTimeMillis()
+        if (now - lastFlushTime > 5000 || pendingUploaded.size % 10 == 0) {
+            flushUploadedFiles()
+            lastFlushTime = now
+        }
+    }
+
+    private fun flushUploadedFiles() {
+        if (pendingUploaded.isEmpty()) return
         val p = getSharedPreferences("takeout_progress", MODE_PRIVATE)
         val s = p.getStringSet("uf", emptySet())?.toMutableSet() ?: mutableSetOf()
-        s.add(name); p.edit().putStringSet("uf", s).apply()
+        s.addAll(pendingUploaded)
+        p.edit().putStringSet("uf", s).apply()
     }
     private fun clearUploadedFiles() { getSharedPreferences("takeout_progress", MODE_PRIVATE).edit().clear().apply() }
 
@@ -379,33 +393,44 @@ class TakeoutUploadService : Service() {
                         }
 
                         liveLog("[$done/$total] $fn ($ym)")
-                        val data = zis4.readBytes()
 
-                        // 중복 체크
-                        var exSize: Long? = null; var ck = false
-                        api.checkFileExists("$fp/$fn") { exSize = it; ck = true }
-                        while (!ck && isActive) delay(100)
+                        // 임시 파일에 저장 (OOM 방지)
+                        val tmpFile = java.io.File(cacheDir, "takeout_tmp_${System.currentTimeMillis()}")
+                        try {
+                            tmpFile.outputStream().use { out ->
+                                val buf = ByteArray(16384)
+                                var n = zis4.read(buf)
+                                while (n != -1) { out.write(buf, 0, n); n = zis4.read(buf) }
+                            }
+                            val fileSize = tmpFile.length()
 
-                        if (exSize != null && exSize == data.size.toLong()) {
-                            done++; skipped++; uploaded.add(e4.name); saveUploadedFile(e4.name)
-                            liveLog("⏭ 중복: $fn")
-                            progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null, doneBytes, skipped))
-                            e4 = zis4.nextZipEntry; continue
-                        }
+                            // 중복 체크
+                            var exSize: Long? = null; var ck = false
+                            api.checkFileExists("$fp/$fn") { exSize = it; ck = true }
+                            while (!ck && isActive) delay(100)
 
-                        var uDone = false; var uOk = false
-                        api.ensureFolder(fp) { ok ->
-                            if (ok) api.uploadFile(data, fn, fp) { uOk = it; uDone = true }
-                            else uDone = true
-                        }
-                        while (!uDone && isActive) delay(100)
+                            if (exSize != null && exSize == fileSize) {
+                                done++; skipped++; uploaded.add(e4.name); addUploadedFile(e4.name)
+                                liveLog("⏭ 중복: $fn")
+                                progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null, doneBytes, skipped))
+                                tmpFile.delete(); e4 = zis4.nextZipEntry; continue
+                            }
 
-                        if (uOk) {
-                            done++; doneBytes += data.size; uploaded.add(e4.name); saveUploadedFile(e4.name)
-                            val pct = if (total > 0) done * 100 / total else 0
-                            val sizeKB = String.format("%.1f", data.size / 1024.0); liveLog("✅ $fn (${sizeKB}KB)")
-                            notifyProgress("업로드 $pct% - $fn", done, total)
-                        } else { done++; errors++; liveLog("❌ $fn") }
+                            val data = tmpFile.readBytes()
+                            var uDone = false; var uOk = false
+                            api.ensureFolder(fp) { ok ->
+                                if (ok) api.uploadFile(data, fn, fp) { uOk = it; uDone = true }
+                                else uDone = true
+                            }
+                            while (!uDone && isActive) delay(100)
+
+                            if (uOk) {
+                                done++; doneBytes += fileSize; uploaded.add(e4.name); addUploadedFile(e4.name)
+                                val pct = if (total > 0) done * 100 / total else 0
+                                val sizeKB = String.format("%.1f", fileSize / 1024.0); liveLog("✅ $fn (${sizeKB}KB)")
+                                notifyProgress("업로드 $pct% - $fn", done, total)
+                            } else { done++; errors++; liveLog("❌ $fn") }
+                        } finally { tmpFile.delete() }
 
                         progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null, doneBytes, skipped))
                         delay(200)
@@ -414,6 +439,7 @@ class TakeoutUploadService : Service() {
                 }
                 zis4.close()
 
+                flushUploadedFiles()
                 clearUploadedFiles()
                 clearMediaList()
                 val ok = done - errors - skipped
@@ -423,6 +449,7 @@ class TakeoutUploadService : Service() {
                 progressCallback?.invoke(TakeoutProgress(done, total, errors, true, null, doneBytes, skipped))
                 withContext(Dispatchers.Main) { stopForeground(STOP_FOREGROUND_DETACH); stopSelf() }
             } catch (e: CancellationException) {
+                flushUploadedFiles()
                 liveLog("업로드 중단됨 (이어하기 가능)")
                 progressCallback?.invoke(TakeoutProgress(0,0,0,true,"중단됨 - 이어하기 가능"))
                 stopForeground(STOP_FOREGROUND_DETACH); stopSelf()

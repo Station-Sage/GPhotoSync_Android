@@ -56,11 +56,13 @@ class OneDriveApi(private val context: Context) {
         client.newCall(req).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) { logToFile("[OD] folder onFailure: ${e.message}"); callback(false) }
             override fun onResponse(call: Call, response: Response) {
-                logToFile("[OD] folder resp=${response.code} ${response.body?.string()?.take(300)}")
-                if (response.code in 200..201 || response.code == 409) {
-                    createFolderChain(token, parts, idx + 1, callback)
-                } else {
-                    callback(false)
+                response.use {
+                    logToFile("[OD] folder resp=${it.code} ${it.body?.string()?.take(300)}")
+                    if (it.code in 200..201 || it.code == 409) {
+                        createFolderChain(token, parts, idx + 1, callback)
+                    } else {
+                        callback(false)
+                    }
                 }
             }
         })
@@ -147,7 +149,7 @@ class OneDriveApi(private val context: Context) {
                 .put(chunk.toRequestBody("application/octet-stream".toMediaType()))
                 .build()
 
-            OkHttpClient().newCall(req).enqueue(object : Callback {
+            client.newCall(req).enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) { logToFile("[OD] chunked onFailure: ${e.message}"); callback(false) }
                 override fun onResponse(call: Call, response: Response) {
                     if (response.code in listOf(200, 201, 202)) {
