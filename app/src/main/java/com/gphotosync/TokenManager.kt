@@ -144,7 +144,7 @@ object TokenManager {
             .add("client_id", clientId)
             .add("refresh_token", refresh)
             .add("grant_type", "refresh_token")
-            .add("client_secret", "qtyfaBBYA403=unZUP40~_#")
+            .add("client_secret", "48d31887-5fad-4d73-a9f5-3c356e68a038")
             .add("scope", "Files.ReadWrite offline_access")
             .build()
 

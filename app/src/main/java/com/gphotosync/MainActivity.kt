@@ -477,16 +477,44 @@ class MainActivity : AppCompatActivity() {
         }
         layout.addView(etId)
 
+        layout.addView(TextView(this).apply {
+            text = "\n--- rclone 토큰 직접 입력 (선택) ---"
+            setPadding(0, 24, 0, 8)
+        })
+        val etToken = EditText(this).apply {
+            hint = "rclone authorize 결과 JSON 붙여넣기"
+            minLines = 3
+            maxLines = 5
+        }
+        layout.addView(etToken)
+
         AlertDialog.Builder(this)
             .setTitle("Microsoft API 설정")
             .setView(layout)
             .setPositiveButton("저장") { _, _ ->
                 val id = etId.text.toString().trim()
+                val tokenJson = etToken.text.toString().trim()
                 if (id.isNotEmpty()) {
                     TokenManager.save(TokenManager.KEY_MS_CLIENT_ID, id)
-                    updateAuthUI()
-                    Toast.makeText(this, "저장 완료", Toast.LENGTH_SHORT).show()
                 }
+                if (tokenJson.isNotEmpty()) {
+                    try {
+                        val json = org.json.JSONObject(tokenJson)
+                        val access = json.getString("access_token")
+                        val refresh = json.optString("refresh_token", "")
+                        val expiresIn = json.optLong("expires_in", 3600)
+                        TokenManager.save(TokenManager.KEY_MS_ACCESS, access)
+                        if (refresh.isNotEmpty()) TokenManager.save(TokenManager.KEY_MS_REFRESH, refresh)
+                        TokenManager.saveLong(TokenManager.KEY_MS_EXPIRY, System.currentTimeMillis() / 1000 + expiresIn)
+                        Toast.makeText(this, "토큰 저장 완료!", Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(this, "JSON 파싱 실패: " + e.message, Toast.LENGTH_LONG).show()
+                    }
+                }
+                if (id.isEmpty() && tokenJson.isEmpty()) {
+                    Toast.makeText(this, "입력값 없음", Toast.LENGTH_SHORT).show()
+                }
+                updateAuthUI()
             }
             .setNegativeButton("취소", null)
             .show()
