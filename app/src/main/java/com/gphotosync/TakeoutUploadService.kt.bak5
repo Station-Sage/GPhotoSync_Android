@@ -55,7 +55,7 @@ class TakeoutUploadService : Service() {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var job: Job? = null
-    private val jsonDateMap = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val jsonDateMap = mutableMapOf<String, String>()
     private val createdFolders = mutableSetOf<String>()
 
     // === OkHttp 콜백 → suspend 변환 ===
@@ -439,7 +439,9 @@ class TakeoutUploadService : Service() {
                     val dstFolder = "${api.rootFolder}/Albums/$albumName"
 
                     // 대상 폴더 생성
-                    val folderOk = ensureFolderSuspend(api, dstFolder)
+                    var folderOk = false; var folderDone = false
+                    api.ensureFolder(dstFolder) { folderOk = it; folderDone = true }
+                    while (!folderDone && isActive) delay(100)
 
                     if (!folderOk) {
                         errors++; copied++
@@ -449,7 +451,9 @@ class TakeoutUploadService : Service() {
                     }
 
                     // OneDrive에서 파일 복사
-                    val copyOk = suspendCoroutine<Boolean> { cont -> api.copyFile(srcPath, dstFolder, fn) { cont.resume(it) } }
+                    var copyOk = false; var copyDone = false
+                    api.copyFile(srcPath, dstFolder, fn) { copyOk = it; copyDone = true }
+                    while (!copyDone && isActive) delay(100)
 
                     copied++
                     if (copyOk) {
@@ -613,12 +617,7 @@ class TakeoutUploadService : Service() {
                                 tmpOut?.flush(); tmpOut?.close()
                                 val data = if (tmpFile != null) tmpFile.readBytes() else baos.toByteArray()
 
-                                try {
-                                    channel.send(UploadItem(e4.name, fn, fp, data, totalRead, tmpFile))
-                                } catch (ce: kotlinx.coroutines.CancellationException) {
-                                    tmpFile?.delete()
-                                    throw ce
-                                }
+                                channel.send(UploadItem(e4.name, fn, fp, data, totalRead, tmpFile))
                             } else { drain(zis4) }
                             e4 = zis4.nextZipEntry
                         }
@@ -689,12 +688,7 @@ class TakeoutUploadService : Service() {
         }
     }
 
-    private var lastNotifyTime = 0L
-    @Synchronized
     private fun notifyProgress(msg: String, done: Int, total: Int) {
-        val now = System.currentTimeMillis()
-        if (now - lastNotifyTime < 300 && done < total) return  // 300ms 쓰로틀
-        lastNotifyTime = now
         (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIF_ID, buildNotification(msg, done, total))
     }
 
