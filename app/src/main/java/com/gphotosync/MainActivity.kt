@@ -59,7 +59,6 @@ class MainActivity : AppCompatActivity() {
     private var lastAnalyzeStatusText: String = ""
     private var lastZipInfoText: String = "ZIP 파일을 선택하세요"
     private var lastTakeoutStatusText: String = ""
-    private var currentTabIndex: Int = 0
 
     private val googleAuthLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -107,7 +106,7 @@ class MainActivity : AppCompatActivity() {
         setupTabs()
 
         requestNotificationPermission()
-        intent?.let { handleOpenTab(it) }
+        handleOpenTab(intent)
 
         SyncForegroundService.progressCallback = { progress ->
             runOnUiThread { updateProgress(progress) }
@@ -151,7 +150,6 @@ class MainActivity : AppCompatActivity() {
 
         tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab) {
-                currentTabIndex = tab.position
                 contentFrame.removeAllViews()
                 when (tab.position) {
                     0 -> { contentFrame.addView(syncView); loadHistorySummary() }
@@ -1162,37 +1160,41 @@ class MainActivity : AppCompatActivity() {
             } else {
                 Toast.makeText(this, "알림 권한이 거부되었습니다. 설정에서 직접 허용해주세요.", Toast.LENGTH_LONG).show()
             }
+        }
+    }
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
-        setIntent(intent)
-        intent?.let { handleOpenTab(it) }
+        if (intent != null) {
+            setIntent(intent)
+            handleOpenTab(intent)
+        }
     }
 
     private fun handleOpenTab(intent: Intent) {
-        val tab = intent.getIntExtra("OPEN_TAB", -1)
-        if (tab in 0..3) {
+        val tabIndex = intent.getIntExtra("OPEN_TAB", -1)
+        if (tabIndex >= 0) {
             intent.removeExtra("OPEN_TAB")
             val tabLayout = findViewById<TabLayout>(R.id.tabLayout)
-            if (tabLayout.selectedTabPosition != tab) {
-                tabLayout.getTabAt(tab)?.select()
-            } else if (tab == 3) {
-                setupTakeoutCallbacks()
-                restoreTakeoutState()
+            if (tabIndex < tabLayout.tabCount) {
+                if (tabLayout.selectedTabPosition == tabIndex && tabIndex == 3) {
+                    setupTakeoutCallbacks()
+                    restoreTakeoutState()
+                } else {
+                    tabLayout.getTabAt(tabIndex)?.select()
+                }
             }
         }
     }
 
     override fun onResume() {
         super.onResume()
+        updateAuthUI()
+        // 콜백 재설정 (다른 앱에서 돌아왔을 때)
         setupTakeoutCallbacks()
-        SyncForegroundService.progressCallback = { progress ->
-            runOnUiThread { updateProgress(progress) }
-        }
-        SyncForegroundService.logCallback = { line ->
-            runOnUiThread { appendLiveLog(line) }
-        }
-        if (currentTabIndex == 3) {
+        // 현재 Takeout 탭이면 상태 복원
+        val tabLayout = findViewById<TabLayout>(R.id.tabLayout)
+        if (tabLayout.selectedTabPosition == 3) {
             restoreTakeoutState()
         }
     }
