@@ -224,7 +224,7 @@ class SyncForegroundService : Service() {
                 logToFile("[SYNC] ensureFolder result: $folderOk")
                 if (folderOk) {
                     oneDriveApi.uploadFile(fileData!!, item.filename, folderPath) { ok ->
-                        uploadOk = ok; uploadDone = true
+                        uploadOk = ok != null
                     }
                 } else { uploadDone = true }
             }
@@ -300,7 +300,7 @@ class SyncForegroundService : Service() {
                 logToFile("[SYNC] ensureFolder result: $folderOk")
                 if (folderOk) {
                     oneDriveApi.uploadFile(fileData!!, record.filename, folderPath) { ok ->
-                        uploadOk = ok
+                        uploadOk = ok != null
                         uploadDone = true
                     }
                 } else {
