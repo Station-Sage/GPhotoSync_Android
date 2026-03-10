@@ -516,7 +516,10 @@ class MainActivity : AppCompatActivity() {
         selectedZipUri = uri
         val v = takeoutView ?: return
 
-        // ZIP 파일 정보 표시
+        appendTakeoutLog("ZIP 파일 선택됨, 분석 중...")
+        v.findViewById<TextView>(R.id.tvZipInfo).text = "ZIP 파일 분석 중..."
+        v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = false
+
         Thread {
             try {
                 val input = contentResolver.openInputStream(uri)
@@ -529,8 +532,10 @@ class MainActivity : AppCompatActivity() {
                 val startD = filterStartDate
                 val endD = filterEndDate
                 val yearPattern = Regex("""((?:19|20)\d{2})[\-_]?(\d{2})[\-_]?(\d{2})""")
+                var scannedCount = 0
                 while (entry != null) {
                     if (!entry.isDirectory) {
+                        scannedCount++
                         val ext = entry.name.substringAfterLast('.', "").lowercase()
                         if (ext in imageExt || ext in videoExt) {
                             val fname = entry.name.substringAfterLast('/')
@@ -544,7 +549,8 @@ class MainActivity : AppCompatActivity() {
                             }
                             if (inRange) {
                                 mediaCount++
-                                totalSize += entry.size
+                                val sz = entry.size
+                                if (sz > 0) totalSize += sz
                             }
                         }
                     }
@@ -552,17 +558,25 @@ class MainActivity : AppCompatActivity() {
                 }
                 zis.close()
                 val sizeMB = String.format("%.1f", totalSize / 1024.0 / 1024.0)
+                val sizeText = if (totalSize > 0) " (약 ${sizeMB}MB)" else ""
                 runOnUiThread {
-                    v.findViewById<TextView>(R.id.tvZipInfo).text = "미디어 파일: ${mediaCount}개 (약 ${sizeMB}MB)"
+                    v.findViewById<TextView>(R.id.tvZipInfo).text = "미디어 파일: ${mediaCount}개${sizeText} (전체 ${scannedCount}개 스캔)"
                     v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = mediaCount > 0
+                    appendTakeoutLog("분석 완료: 미디어 ${mediaCount}개 발견 (전체 ${scannedCount}개 파일)")
+                    if (mediaCount == 0) {
+                        appendTakeoutLog("미디어 파일이 없습니다. 날짜 필터를 확인하세요.")
+                    }
                 }
             } catch (e: Exception) {
                 runOnUiThread {
                     v.findViewById<TextView>(R.id.tvZipInfo).text = "ZIP 분석 실패: ${e.message}"
+                    appendTakeoutLog("ZIP 분석 실패: ${e.message}")
+                    v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = false
                 }
             }
         }.start()
     }
+
 
     private fun startTakeoutUpload(uri: Uri) {
         takeoutLogLines.clear()
