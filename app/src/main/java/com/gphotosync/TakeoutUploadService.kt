@@ -419,7 +419,8 @@ class TakeoutUploadService : Service() {
             .setContentTitle("📦 Takeout → OneDrive").setContentText(msg)
             .setSmallIcon(android.R.drawable.ic_menu_upload).setContentIntent(pi)
             .addAction(android.R.drawable.ic_media_pause, "중단", si)
-            .setProgress(total, done, total == 0).setOngoing(true).setOnlyAlertOnce(true).build()
+            .setProgress(total, done, total == 0)
+            .setContentIntent(openPi).setOngoing(true).setOnlyAlertOnce(true).build()
     }
 
     private fun createNotificationChannel() {

@@ -53,6 +53,12 @@ class MainActivity : AppCompatActivity() {
     private var takeoutLogLines = mutableListOf<String>()
     private var filterStartDate: String? = null
     private var filterEndDate: String? = null
+    private var isTakeoutAnalyzing = false
+    private var isTakeoutUploading = false
+    private var lastTakeoutProgress: TakeoutProgress? = null
+    private var lastAnalyzeStatusText: String = ""
+    private var lastZipInfoText: String = "ZIP 파일을 선택하세요"
+    private var lastTakeoutStatusText: String = ""
 
     private val googleAuthLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -100,6 +106,7 @@ class MainActivity : AppCompatActivity() {
         setupTabs()
 
         requestNotificationPermission()
+        handleOpenTab(intent)
 
         SyncForegroundService.progressCallback = { progress ->
             runOnUiThread { updateProgress(progress) }
@@ -153,7 +160,7 @@ class MainActivity : AppCompatActivity() {
                     0 -> { contentFrame.addView(syncView); loadHistorySummary() }
                     1 -> { contentFrame.addView(authView); updateAuthUI() }
                     2 -> contentFrame.addView(infoView)
-                    3 -> contentFrame.addView(takeoutView)
+                    3 -> { contentFrame.addView(takeoutView); restoreTakeoutState() }
                 }
             }
             override fun onTabUnselected(tab: TabLayout.Tab) {}
@@ -545,6 +552,69 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun restoreTakeoutState() {
+        val v = takeoutView ?: return
+        // 로그 복원
+        if (takeoutLogLines.isNotEmpty()) {
+            v.findViewById<TextView>(R.id.tvTakeoutLog).text = takeoutLogLines.joinToString("\n")
+            val sv = v.findViewById<ScrollView>(R.id.scrollTakeoutLog)
+            sv.post { sv.fullScroll(View.FOCUS_DOWN) }
+        }
+        // ZIP 정보 복원
+        if (selectedZipUri != null) {
+            v.findViewById<TextView>(R.id.tvZipInfo)?.text = lastZipInfoText
+        }
+        // 날짜 필터 복원
+        if (filterStartDate != null) v.findViewById<android.widget.Button>(R.id.btnStartDate)?.text = filterStartDate
+        if (filterEndDate != null) v.findViewById<android.widget.Button>(R.id.btnEndDate)?.text = filterEndDate
+        if (filterStartDate != null || filterEndDate != null) {
+            v.findViewById<TextView>(R.id.tvDateRange)?.text = "${filterStartDate ?: "처음"} ~ ${filterEndDate ?: "끝"}"
+        }
+        // 분석 중 상태 복원
+        if (isTakeoutAnalyzing) {
+            val pb = v.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar)
+            pb.visibility = View.VISIBLE
+            v.findViewById<TextView>(R.id.tvTakeoutProgress).visibility = View.VISIBLE
+            v.findViewById<TextView>(R.id.tvTakeoutProgress).text = lastAnalyzeStatusText
+            v.findViewById<TextView>(R.id.tvTakeoutStatus).visibility = View.VISIBLE
+            v.findViewById<TextView>(R.id.tvTakeoutStatus).text = "백그라운드에서 ZIP 분석 중..."
+            v.findViewById<android.widget.Button>(R.id.btnStopAnalyze).visibility = View.VISIBLE
+            v.findViewById<android.widget.Button>(R.id.btnResumeAnalyze).visibility = View.GONE
+            v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = false
+            val p = lastTakeoutProgress
+            if (p != null && p.total > 0) {
+                pb.isIndeterminate = false
+                pb.max = p.total
+                pb.progress = p.done
+            }
+            return
+        }
+        // 업로드 중 상태 복원
+        if (isTakeoutUploading) {
+            val pb = v.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar)
+            pb.visibility = View.VISIBLE
+            v.findViewById<TextView>(R.id.tvTakeoutProgress).visibility = View.VISIBLE
+            v.findViewById<TextView>(R.id.tvTakeoutStatus).visibility = View.VISIBLE
+            v.findViewById<android.widget.Button>(R.id.btnStopTakeout).visibility = View.VISIBLE
+            v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = false
+            val p = lastTakeoutProgress
+            if (p != null && p.total > 0) {
+                pb.isIndeterminate = false
+                pb.max = p.total
+                pb.progress = p.done
+                val pct = p.done * 100 / p.total
+                val doneMB = String.format("%.1f", p.doneBytes / 1024.0 / 1024.0)
+                v.findViewById<TextView>(R.id.tvTakeoutProgress).text = "${p.done}/${p.total} ($pct%) | ${doneMB}MB"
+            }
+            v.findViewById<TextView>(R.id.tvTakeoutStatus).text = "업로드 중..."
+            return
+        }
+        // 완료/대기 상태
+        if (lastTakeoutStatusText.isNotEmpty()) {
+            v.findViewById<TextView>(R.id.tvTakeoutStatus).text = lastTakeoutStatusText
+        }
+    }
+
     private fun setupTakeoutTab() {
         val v = takeoutView ?: return
 
@@ -679,13 +749,17 @@ class MainActivity : AppCompatActivity() {
                     pb.progress = progress.done
                     val pct = if (progress.total > 0) progress.done * 100 / progress.total else 0
                     val readMB = String.format("%.0f", progress.doneBytes / 1024.0 / 1024.0)
-                    vv.findViewById<TextView>(R.id.tvTakeoutProgress).text = "분석 중: $pct% (${readMB}MB)"
+                    val analyzeText = "분석 중: $pct% (${readMB}MB)"
+                    vv.findViewById<TextView>(R.id.tvTakeoutProgress).text = analyzeText
+                    lastAnalyzeStatusText = analyzeText
+                    lastTakeoutProgress = progress
                 }
             }
         }
 
         // 분석 결과 콜백 설정
         TakeoutUploadService.analyzeCallback = fun(mediaCount: Int, totalSize: Long, scannedCount: Int) {
+            isTakeoutAnalyzing = false
             val vv = takeoutView ?: return
             vv.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar).visibility = View.GONE
             vv.findViewById<TextView>(R.id.tvTakeoutProgress).visibility = View.GONE
@@ -714,6 +788,9 @@ class MainActivity : AppCompatActivity() {
             }
             vv.findViewById<TextView>(R.id.tvTakeoutStatus).text = "ZIP 파일을 선택 후 업로드하세요"
         }
+
+        isTakeoutAnalyzing = true
+        isTakeoutUploading = false
 
         // 분석 중단 버튼 표시
         v.findViewById<android.widget.Button>(R.id.btnStopAnalyze).visibility = View.VISIBLE
@@ -784,6 +861,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateTakeoutProgress(progress: TakeoutProgress) {
+        lastTakeoutProgress = progress
         val v = takeoutView ?: return
         val pb = v.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar)
         val tvProgress = v.findViewById<TextView>(R.id.tvTakeoutProgress)
@@ -799,6 +877,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         if (progress.finished) {
+            isTakeoutUploading = false
             v.findViewById<android.widget.Button>(R.id.btnStopTakeout).visibility = View.GONE
             v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = true
             v.findViewById<android.widget.Button>(R.id.btnStartTakeout).text = "🚀 OneDrive에 업로드"
@@ -1088,6 +1167,21 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, "알림 권한이 허용되었습니다", Toast.LENGTH_SHORT).show()
             } else {
                 Toast.makeText(this, "알림 권한이 거부되었습니다. 설정에서 직접 허용해주세요.", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        intent?.let { handleOpenTab(it) }
+    }
+
+    private fun handleOpenTab(intent: Intent) {
+        val tabIndex = intent.getIntExtra("OPEN_TAB", -1)
+        if (tabIndex >= 0) {
+            val tabLayout = findViewById<TabLayout>(R.id.tabLayout)
+            if (tabIndex < tabLayout.tabCount) {
+                tabLayout.getTabAt(tabIndex)?.select()
             }
         }
     }
