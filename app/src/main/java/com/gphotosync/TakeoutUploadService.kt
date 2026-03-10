@@ -8,7 +8,7 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.*
 import java.io.InputStream
-import java.util.zip.ZipInputStream
+import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
 
 class TakeoutUploadService : Service() {
 
@@ -103,8 +103,8 @@ class TakeoutUploadService : Service() {
                 var inputStream: InputStream? = null
                 try {
                     inputStream = contentResolver.openInputStream(zipUri)
-                    val zis = ZipInputStream(inputStream)
-                    var entry = zis.nextEntry
+                    val zis = ZipArchiveInputStream(inputStream)
+                    var entry = zis.nextZipEntry
                     while (entry != null && isActive) {
                         if (!entry.isDirectory && isMediaFile(entry.name)) {
                             val fname = entry.name.substringAfterLast('/')
@@ -113,8 +113,7 @@ class TakeoutUploadService : Service() {
                                 mediaEntries.add(Pair(entry.name, entry.size))
                             }
                         }
-                        zis.closeEntry()
-                        entry = zis.nextEntry
+                        entry = zis.nextZipEntry
                     }
                     zis.close()
                 } catch (e: Exception) {
@@ -149,8 +148,8 @@ class TakeoutUploadService : Service() {
 
                 val mediaNames = mediaEntries.map { it.first }.toSet()
                 inputStream = contentResolver.openInputStream(zipUri)
-                val zis = ZipInputStream(inputStream)
-                var entry = zis.nextEntry
+                val zis = ZipArchiveInputStream(inputStream)
+                var entry = zis.nextZipEntry
 
                 while (entry != null && isActive) {
                     if (!entry.isDirectory && entry.name in mediaNames) {
@@ -195,8 +194,7 @@ class TakeoutUploadService : Service() {
                         progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null, doneBytes))
                         delay(300)
                     }
-                    zis.closeEntry()
-                    entry = zis.nextEntry
+                    entry = zis.nextZipEntry
                 }
                 zis.close()
 

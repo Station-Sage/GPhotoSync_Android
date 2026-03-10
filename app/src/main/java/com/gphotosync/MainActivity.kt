@@ -26,7 +26,7 @@ import java.util.Date
 import java.util.Locale
 import java.io.File
 import java.io.FileWriter
-import java.util.zip.ZipInputStream
+import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
 import android.app.DatePickerDialog
 import java.util.Calendar
 import android.Manifest
@@ -520,12 +520,12 @@ class MainActivity : AppCompatActivity() {
         Thread {
             try {
                 val input = contentResolver.openInputStream(uri)
-                val zis = ZipInputStream(input)
+                val zis = ZipArchiveInputStream(input)
                 var mediaCount = 0
                 var totalSize = 0L
                 val imageExt = setOf("jpg","jpeg","png","gif","bmp","webp","heic","heif","tiff","tif","raw","cr2","nef","arw","dng")
                 val videoExt = setOf("mp4","mov","avi","mkv","wmv","flv","webm","m4v","3gp")
-                var entry = zis.nextEntry
+                var entry = zis.nextZipEntry
                 val startD = filterStartDate
                 val endD = filterEndDate
                 val yearPattern = Regex("""((?:19|20)\d{2})[\-_]?(\d{2})[\-_]?(\d{2})""")
@@ -548,8 +548,7 @@ class MainActivity : AppCompatActivity() {
                             }
                         }
                     }
-                    zis.closeEntry()
-                    entry = zis.nextEntry
+                    entry = zis.nextZipEntry
                 }
                 zis.close()
                 val sizeMB = String.format("%.1f", totalSize / 1024.0 / 1024.0)
