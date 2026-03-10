@@ -24,6 +24,8 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.google.android.material.tabs.TabLayout
 import org.json.JSONObject
+import java.io.File
+import java.io.FileWriter
 
 class MainActivity : AppCompatActivity() {
 
@@ -160,23 +162,21 @@ class MainActivity : AppCompatActivity() {
     // ======== INFO TAB ========
     private fun setupInfoTab() {
         val v = infoView ?: return
-        v.findViewById<TextView>(R.id.tvAppVersion)?.text = "GPhotoSync v${packageManager.getPackageInfo(packageName, 0).versionName}"
-        v.findViewById<Button>(R.id.btnTheme)?.setOnClickListener {
-            val themes = arrayOf("시스템 설정", "라이트", "다크")
-            AlertDialog.Builder(this).setTitle("테마 선택").setItems(themes) { _, which ->
-                getSharedPreferences("app_settings", MODE_PRIVATE).edit().putInt("theme", which).apply()
-                applySavedTheme()
-            }.show()
+        val prefs = getSharedPreferences("app_settings", MODE_PRIVATE)
+        val rg = v.findViewById<RadioGroup>(R.id.rgTheme)
+        when (prefs.getInt("theme", 0)) {
+            0 -> v.findViewById<RadioButton>(R.id.rbSystem).isChecked = true
+            1 -> v.findViewById<RadioButton>(R.id.rbLight).isChecked = true
+            2 -> v.findViewById<RadioButton>(R.id.rbDark).isChecked = true
         }
-        v.findViewById<Button>(R.id.btnViewLog)?.setOnClickListener {
-            try {
-                val logFile = File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "sync_log.txt")
-                if (logFile.exists()) {
-                    val lines = logFile.readLines().takeLast(200).joinToString("\n")
-                    AlertDialog.Builder(this).setTitle("동기화 로그").setMessage(lines)
-                        .setPositiveButton("닫기", null).setNeutralButton("삭제") { _, _ -> logFile.delete(); Toast.makeText(this, "로그 삭제됨", Toast.LENGTH_SHORT).show() }.show()
-                } else { Toast.makeText(this, "로그 파일이 없습니다", Toast.LENGTH_SHORT).show() }
-            } catch (e: Exception) { Toast.makeText(this, "로그 읽기 실패: ${e.message}", Toast.LENGTH_SHORT).show() }
+        rg.setOnCheckedChangeListener { _, checkedId ->
+            val theme = when (checkedId) {
+                R.id.rbLight -> 1
+                R.id.rbDark -> 2
+                else -> 0
+            }
+            prefs.edit().putInt("theme", theme).apply()
+            applySavedTheme()
         }
     }
 
