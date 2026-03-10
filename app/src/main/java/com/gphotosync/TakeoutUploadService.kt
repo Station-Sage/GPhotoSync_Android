@@ -462,7 +462,7 @@ class TakeoutUploadService : Service() {
                     if (!isActive) break
                     // 연도 폴더 내 월 하위폴더 탐색
                     val children = listChildrenSuspend(api, yearFolderId) ?: continue
-                    val monthFolders = children.filter { it.third && it.second.matches(Regex("^\d{1,2}$|^unknown$")) }
+                    val monthFolders = children.filter { it.third && it.second.matches(Regex("""^\d{1,2}$|^unknown$""")) }
 
                     if (monthFolders.isEmpty()) continue
                     liveLog("📂 $yearName: 월 폴더 ${monthFolders.size}개 발견")
