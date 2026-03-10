@@ -265,15 +265,6 @@
                     android:backgroundTint="#1565C0"
                     android:layout_marginTop="8dp"
                     android:visibility="gone" />
-                <Button
-                    android:id="@+id/btnMigrateFolder"
-                    android:layout_width="match_parent"
-                    android:layout_height="48dp"
-                    android:text="📂 월 폴더 → 연도 폴더 정리"
-                    android:textSize="14sp"
-                    android:backgroundTint="#6A1B9A"
-                    android:layout_marginTop="8dp"
-                    android:visibility="gone" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 

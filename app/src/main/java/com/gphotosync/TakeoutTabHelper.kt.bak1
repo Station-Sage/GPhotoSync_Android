@@ -90,9 +90,6 @@ class TakeoutTabHelper(
                     if (albumCount > 0 && hasResumable) {
                         takeoutView.findViewById<Button>(R.id.btnOrganizeAlbums)?.visibility = View.VISIBLE
                     }
-                    if (hasResumable) {
-                        takeoutView.findViewById<Button>(R.id.btnMigrateFolder)?.visibility = View.VISIBLE
-                    }
                 } else {
                     takeoutView.findViewById<TextView>(R.id.tvZipInfo).text = "이전 ZIP 파일 선택됨 (분석 필요)"
                     appendTakeoutLog("이전 ZIP 파일 복원됨. 분석이 필요합니다.")
@@ -224,30 +221,6 @@ class TakeoutTabHelper(
 
             val intent = Intent(activity, TakeoutUploadService::class.java)
             intent.action = TakeoutUploadService.ACTION_ORGANIZE_ALBUMS
-            activity.startForegroundService(intent)
-        }
-
-        takeoutView.findViewById<Button>(R.id.btnMigrateFolder)?.setOnClickListener {
-            appendTakeoutLog("월 폴더 → 연도 폴더 정리 시작...")
-            takeoutView.findViewById<Button>(R.id.btnMigrateFolder)?.isEnabled = false
-            isTakeoutUploading = true; isTakeoutAnalyzing = false
-            setupCallbacks()
-
-            TakeoutUploadService.migrateCallback = fun(total: Int, moved: Int, errors: Int) {
-                activity.runOnUiThread {
-                    isTakeoutUploading = false
-                    takeoutView.findViewById<Button>(R.id.btnMigrateFolder)?.isEnabled = true
-                    if (total > 0) {
-                        appendTakeoutLog("폴더 정리 완료: 이동 $moved, 실패 $errors (전체 $total)")
-                        takeoutView.findViewById<TextView>(R.id.tvTakeoutStatus).text = "폴더 정리 완료! ${moved}개 이동"
-                    } else {
-                        appendTakeoutLog("정리할 월 폴더가 없습니다.")
-                    }
-                }
-            }
-
-            val intent = Intent(activity, TakeoutUploadService::class.java)
-            intent.action = TakeoutUploadService.ACTION_MIGRATE
             activity.startForegroundService(intent)
         }
 
@@ -436,7 +409,6 @@ class TakeoutTabHelper(
             if (albumCount > 0) {
                 takeoutView.findViewById<Button>(R.id.btnOrganizeAlbums)?.visibility = View.VISIBLE
             }
-            takeoutView.findViewById<Button>(R.id.btnMigrateFolder)?.visibility = View.VISIBLE
         } else { tvStatus.text = "업로드 중..." }
     }
 

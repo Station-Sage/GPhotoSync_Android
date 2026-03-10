@@ -43,7 +43,6 @@ class TakeoutUploadService : Service() {
         const val ACTION_RESUME = "com.gphotosync.TAKEOUT_RESUME"
         const val ACTION_ANALYZE_RESUME = "com.gphotosync.TAKEOUT_ANALYZE_RESUME"
         const val ACTION_ORGANIZE_ALBUMS = "com.gphotosync.TAKEOUT_ORGANIZE_ALBUMS"
-        const val ACTION_MIGRATE = "com.gphotosync.TAKEOUT_MIGRATE"
         const val EXTRA_ZIP_URI = "zip_uri"
         const val CHANNEL_ID = "takeout_channel"
         const val NOTIF_ID = 2001
@@ -52,7 +51,6 @@ class TakeoutUploadService : Service() {
         var logCallback: ((String) -> Unit)? = null
         var analyzeCallback: ((Int, Long, Int) -> Unit)? = null
         var organizeCallback: ((Int, Int, Int) -> Unit)? = null  // (total, copied, errors)
-        var migrateCallback: ((Int, Int, Int) -> Unit)? = null   // (total, moved, errors)
     }
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -73,21 +71,6 @@ class TakeoutUploadService : Service() {
 
     private suspend fun createAlbumSuspend(api: OneDriveApi, name: String, ids: List<String>): Boolean =
         suspendCoroutine { cont -> api.createAlbum(name, ids) { cont.resume(it) } }
-
-    private suspend fun moveFileSuspend(api: OneDriveApi, itemId: String, destFolderId: String): Boolean =
-        suspendCoroutine { cont -> api.moveFile(itemId, destFolderId) { cont.resume(it) } }
-
-    private suspend fun listChildrenSuspend(api: OneDriveApi, folderId: String): List<Triple<String, String, Boolean>>? =
-        suspendCoroutine { cont -> api.listChildren(folderId) { cont.resume(it) } }
-
-    private suspend fun deleteItemSuspend(api: OneDriveApi, itemId: String): Boolean =
-        suspendCoroutine { cont -> api.deleteItem(itemId) { cont.resume(it) } }
-
-    private suspend fun getFolderIdSuspend(api: OneDriveApi, path: String): String? =
-        suspendCoroutine { cont -> api.getFolderId(path) { cont.resume(it) } }
-
-    private suspend fun checkFileExistsSuspend(api: OneDriveApi, path: String): Long? =
-        suspendCoroutine { cont -> api.checkFileExists(path) { cont.resume(it) } }
 
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onCreate() { super.onCreate(); createNotificationChannel() }
@@ -118,10 +101,6 @@ class TakeoutUploadService : Service() {
             ACTION_ORGANIZE_ALBUMS -> {
                 startForeground(NOTIF_ID, buildNotification("앨범 정리 중...", 0, 0))
                 organizeAlbums()
-            }
-            ACTION_MIGRATE -> {
-                startForeground(NOTIF_ID, buildNotification("폴더 정리 중...", 0, 0))
-                migrateMonthToYear()
             }
         }
         return START_NOT_STICKY
@@ -436,83 +415,6 @@ class TakeoutUploadService : Service() {
     }
 
 
-
-    // ======== 마이그레이션: 월 폴더 → 연도 폴더 ========
-    private fun migrateMonthToYear() {
-        val api = OneDriveApi(this)
-        job = scope.launch {
-            try {
-                liveLog("월 폴더 → 연도 폴더 정리 시작...")
-                notifyProgress("폴더 정리 중...", 0, 0)
-
-                // rootFolder 하위의 연도 폴더 목록 가져오기
-                val rootId = getFolderIdSuspend(api, api.rootFolder)
-                if (rootId == null) {
-                    liveLog("❌ 루트 폴더를 찾을 수 없음: ${api.rootFolder}")
-                    android.os.Handler(android.os.Looper.getMainLooper()).post { migrateCallback?.invoke(0, 0, 1) }
-                    stopForeground(STOP_FOREGROUND_DETACH); stopSelf(); return@launch
-                }
-
-                val yearFolders = listChildrenSuspend(api, rootId)?.filter { it.third } ?: emptyList()
-                liveLog("연도 폴더 ${yearFolders.size}개 발견")
-
-                var totalMoved = 0; var totalErrors = 0; var totalFiles = 0
-
-                for ((yearFolderId, yearName, _) in yearFolders) {
-                    if (!isActive) break
-                    // 연도 폴더 내 월 하위폴더 탐색
-                    val children = listChildrenSuspend(api, yearFolderId) ?: continue
-                    val monthFolders = children.filter { it.third && it.second.matches(Regex("^\d{1,2}$|^unknown$")) }
-
-                    if (monthFolders.isEmpty()) continue
-                    liveLog("📂 $yearName: 월 폴더 ${monthFolders.size}개 발견")
-
-                    for ((monthFolderId, monthName, _) in monthFolders) {
-                        if (!isActive) break
-                        val files = listChildrenSuspend(api, monthFolderId) ?: continue
-                        val fileItems = files.filter { !it.third } // 파일만
-
-                        liveLog("  📁 $yearName/$monthName: 파일 ${fileItems.size}개 이동 중...")
-                        totalFiles += fileItems.size
-
-                        for ((fileId, fileName, _) in fileItems) {
-                            if (!isActive) break
-                            val ok = moveFileSuspend(api, fileId, yearFolderId)
-                            if (ok) {
-                                totalMoved++
-                            } else {
-                                totalErrors++
-                                liveLog("  ⚠ 이동 실패: $fileName")
-                            }
-                        }
-
-                        // 폴더가 비었으면 삭제
-                        val remaining = listChildrenSuspend(api, monthFolderId)
-                        if (remaining != null && remaining.isEmpty()) {
-                            deleteItemSuspend(api, monthFolderId)
-                            liveLog("  🗑 빈 폴더 삭제: $yearName/$monthName")
-                        }
-
-                        notifyProgress("$yearName/$monthName 정리 중...", totalMoved, totalFiles)
-                    }
-                }
-
-                // uploaded 목록의 경로 정보도 갱신 (월 경로 제거)
-                val msg = "폴더 정리 완료! 이동: $totalMoved, 실패: $totalErrors (전체 $totalFiles)"
-                liveLog(msg)
-                (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIF_ID, buildDoneNotification("✅ $msg"))
-                android.os.Handler(android.os.Looper.getMainLooper()).post { migrateCallback?.invoke(totalFiles, totalMoved, totalErrors) }
-                stopForeground(STOP_FOREGROUND_DETACH); stopSelf()
-            } catch (e: CancellationException) {
-                liveLog("폴더 정리 중단됨")
-                stopForeground(STOP_FOREGROUND_DETACH); stopSelf()
-            } catch (e: Exception) {
-                liveLog("폴더 정리 오류: ${e.message}")
-                stopForeground(STOP_FOREGROUND_DETACH); stopSelf()
-            }
-        }
-    }
-
     // ======== 앨범 정리 (OneDrive bundle 앨범 생성 — 용량 0) ========
     private fun organizeAlbums() {
         val api = OneDriveApi(this)
@@ -705,35 +607,14 @@ class TakeoutUploadService : Service() {
                                 val fp = "${api.rootFolder}/$ym"
 
                                 if (e4.name in uploaded) {
-                                    if (resume) {
-                                        // 이어하기 시: OneDrive에 실제 존재하는지 확인
-                                        val checkPath = "$fp/$fn"
-                                        val exists = checkFileExistsSuspend(api, checkPath)
-                                        if (exists == null) {
-                                            // 파일이 OneDrive에 없음 → uploaded에서 제거, 다시 업로드
-                                            synchronized(lock) { uploaded.remove(e4.name) }
-                                            liveLog("🔄 재업로드 필요: $fn (OneDrive에서 삭제됨)")
-                                            // continue하지 않고 아래 업로드 로직 진행
-                                        } else {
-                                            val d = aDone.incrementAndGet()
-                                            val s = aSkipped.incrementAndGet()
-                                            if (s % 100 == 0 || s == 1) {
-                                                val pct = if (total > 0) d * 100 / total else 0
-                                                notifyProgress("스킵 중 ($pct%) ${s}개 완료", d, total)
-                                                progressCallback?.invoke(TakeoutProgress(d, total, aErrors.get(), false, null, aDoneBytes.get(), s))
-                                            }
-                                            drain(zis4); e4 = zis4.nextZipEntry; continue
-                                        }
-                                    } else {
-                                        val d = aDone.incrementAndGet()
-                                        val s = aSkipped.incrementAndGet()
-                                        if (s % 100 == 0 || s == 1) {
-                                            val pct = if (total > 0) d * 100 / total else 0
-                                            notifyProgress("스킵 중 ($pct%) ${s}개 완료", d, total)
-                                            progressCallback?.invoke(TakeoutProgress(d, total, aErrors.get(), false, null, aDoneBytes.get(), s))
-                                        }
-                                        drain(zis4); e4 = zis4.nextZipEntry; continue
+                                    val d = aDone.incrementAndGet()
+                                    val s = aSkipped.incrementAndGet()
+                                    if (s % 100 == 0 || s == 1) {
+                                        val pct = if (total > 0) d * 100 / total else 0
+                                        notifyProgress("스킵 중 ($pct%) ${s}개 완료", d, total)
+                                        progressCallback?.invoke(TakeoutProgress(d, total, aErrors.get(), false, null, aDoneBytes.get(), s))
                                     }
+                                    drain(zis4); e4 = zis4.nextZipEntry; continue
                                 }
 
                                 // 스트리밍 읽기
