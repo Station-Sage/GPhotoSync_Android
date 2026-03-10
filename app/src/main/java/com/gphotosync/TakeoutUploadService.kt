@@ -17,6 +17,7 @@ class TakeoutUploadService : Service() {
         const val ACTION_STOP = "com.gphotosync.TAKEOUT_STOP"
         const val ACTION_ANALYZE = "com.gphotosync.TAKEOUT_ANALYZE"
         const val ACTION_RESUME = "com.gphotosync.TAKEOUT_RESUME"
+        const val ACTION_ANALYZE_RESUME = "com.gphotosync.TAKEOUT_ANALYZE_RESUME"
         const val EXTRA_ZIP_URI = "zip_uri"
         const val CHANNEL_ID = "takeout_channel"
         const val NOTIF_ID = 2001
@@ -61,10 +62,72 @@ class TakeoutUploadService : Service() {
                 val startDate = intent.getStringExtra("start_date")
                 val endDate = intent.getStringExtra("end_date")
                 startForeground(NOTIF_ID, buildNotification("ZIP 파일 분석 중...", 0, 0))
-                analyzeZip(Uri.parse(uriStr), startDate, endDate)
+                analyzeZip(Uri.parse(uriStr), startDate, endDate, resume = false)
+            }
+            ACTION_ANALYZE_RESUME -> {
+                val uriStr = intent.getStringExtra(EXTRA_ZIP_URI) ?: return START_NOT_STICKY
+                val startDate = intent.getStringExtra("start_date")
+                val endDate = intent.getStringExtra("end_date")
+                startForeground(NOTIF_ID, buildNotification("ZIP 분석 이어하기...", 0, 0))
+                analyzeZip(Uri.parse(uriStr), startDate, endDate, resume = true)
             }
         }
         return START_NOT_STICKY
+    }
+
+    // === 분석 진행 상태 저장 (중단 후 이어하기용) ===
+    private fun saveAnalyzeState(scannedCount: Int, mediaCount: Int, totalSize: Long, jsonCount: Int) {
+        val prefs = getSharedPreferences("takeout_analyze", MODE_PRIVATE)
+        prefs.edit()
+            .putInt("scanned_count", scannedCount)
+            .putInt("media_count", mediaCount)
+            .putLong("total_size", totalSize)
+            .putInt("json_count", jsonCount)
+            .apply()
+    }
+
+    private fun loadAnalyzeState(): IntArray {
+        val prefs = getSharedPreferences("takeout_analyze", MODE_PRIVATE)
+        return intArrayOf(
+            prefs.getInt("scanned_count", 0),
+            prefs.getInt("media_count", 0),
+            prefs.getLong("total_size", 0L).toInt(),
+            prefs.getInt("json_count", 0)
+        )
+    }
+
+    private fun loadAnalyzeTotalSize(): Long {
+        return getSharedPreferences("takeout_analyze", MODE_PRIVATE).getLong("total_size", 0L)
+    }
+
+    private fun clearAnalyzeState() {
+        getSharedPreferences("takeout_analyze", MODE_PRIVATE).edit().clear().apply()
+    }
+
+    // 분석 중 발견된 JSON 메타데이터를 영구 저장
+    private fun saveJsonDateMap() {
+        val prefs = getSharedPreferences("takeout_json_map", MODE_PRIVATE)
+        val editor = prefs.edit()
+        editor.clear()
+        editor.putInt("count", jsonDateMap.size)
+        var i = 0
+        for ((k, v) in jsonDateMap) {
+            editor.putString("k_$i", k)
+            editor.putString("v_$i", v)
+            i++
+        }
+        editor.apply()
+    }
+
+    private fun loadJsonDateMap() {
+        val prefs = getSharedPreferences("takeout_json_map", MODE_PRIVATE)
+        val count = prefs.getInt("count", 0)
+        jsonDateMap.clear()
+        for (i in 0 until count) {
+            val k = prefs.getString("k_$i", null) ?: continue
+            val v = prefs.getString("v_$i", null) ?: continue
+            jsonDateMap[k] = v
+        }
     }
 
     // === 업로드 진행 상태 저장 (중단 후 이어하기용) ===
@@ -178,23 +241,53 @@ class TakeoutUploadService : Service() {
         return true
     }
 
-    private fun analyzeZip(zipUri: Uri, startDate: String?, endDate: String?) {
+    private fun analyzeZip(zipUri: Uri, startDate: String?, endDate: String?, resume: Boolean = false) {
         job = scope.launch {
             try {
-                liveLog("ZIP 파일 분석 시작 - JSON 메타데이터 수집 중...")
-                notifyProgress("ZIP 분석 중 (메타데이터 수집)...", 0, 0)
-                
-                // 1단계: JSON 메타데이터 수집
-                jsonDateMap.clear()
+                var skipCount = 0
+                var mediaCount = 0
+                var totalSize = 0L
                 var jsonCount = 0
-                try {
-                    val jsonInput = contentResolver.openInputStream(zipUri)
-                    val jsonZis = ZipArchiveInputStream(jsonInput)
-                    var jsonEntry = jsonZis.nextZipEntry
-                    while (jsonEntry != null && isActive) {
-                        if (!jsonEntry.isDirectory && jsonEntry.name.endsWith(".json")) {
+
+                if (resume) {
+                    // 이전 상태 복원
+                    val state = loadAnalyzeState()
+                    skipCount = state[0]
+                    mediaCount = state[1]
+                    totalSize = loadAnalyzeTotalSize()
+                    jsonCount = state[3]
+                    loadJsonDateMap()
+                    liveLog("분석 이어하기: 이전 ${skipCount}개 스캔 완료, JSON ${jsonCount}개, 미디어 ${mediaCount}개부터 재개")
+                    notifyProgress("분석 이어하기... (${skipCount}개부터)", 0, 0)
+                } else {
+                    clearAnalyzeState()
+                    jsonDateMap.clear()
+                    liveLog("ZIP 파일 분석 시작...")
+                    notifyProgress("ZIP 분석 중...", 0, 0)
+                }
+
+                // JSON + 미디어를 한 번의 스캔으로 처리
+                val inputStream = contentResolver.openInputStream(zipUri)
+                val zis = ZipArchiveInputStream(inputStream)
+                var scannedCount = 0
+                var entry = zis.nextZipEntry
+
+                while (entry != null && isActive) {
+                    if (!entry.isDirectory) {
+                        scannedCount++
+
+                        // 이어하기: 이전에 스캔한 파일은 건너뜀
+                        if (scannedCount <= skipCount) {
+                            // ZIP 스트림 소비 (데이터를 읽어야 다음 엔트리 이동)
+                            try { zis.readBytes() } catch (_: Exception) {}
+                            entry = zis.nextZipEntry
+                            continue
+                        }
+
+                        // JSON 메타데이터 수집
+                        if (entry.name.endsWith(".json")) {
                             try {
-                                val jsonBytes = jsonZis.readBytes()
+                                val jsonBytes = zis.readBytes()
                                 val jsonStr = String(jsonBytes, Charsets.UTF_8)
                                 val result = parseJsonMetadata(jsonStr)
                                 if (result != null) {
@@ -202,28 +295,7 @@ class TakeoutUploadService : Service() {
                                     jsonCount++
                                 }
                             } catch (_: Exception) {}
-                        }
-                        jsonEntry = jsonZis.nextZipEntry
-                    }
-                    jsonZis.close()
-                } catch (e: Exception) {
-                    liveLog("JSON 메타데이터 수집 중 오류 (계속 진행): ${e.message}")
-                }
-                liveLog("JSON 메타데이터 ${jsonCount}개 수집 완료")
-                notifyProgress("ZIP 분석 중 (미디어 스캔)...", 0, 0)
-                
-                // 2단계: 미디어 파일 스캔
-                val inputStream = contentResolver.openInputStream(zipUri)
-                val zis = ZipArchiveInputStream(inputStream)
-                var mediaCount = 0
-                var totalSize = 0L
-                var scannedCount = 0
-                var entry = zis.nextZipEntry
-
-                while (entry != null && isActive) {
-                    if (!entry.isDirectory) {
-                        scannedCount++
-                        if (isMediaFile(entry.name)) {
+                        } else if (isMediaFile(entry.name)) {
                             val fname = entry.name.substringAfterLast('/')
                             val fileDate = extractDateFromName(fname, entry.name)
                             if (isInDateRange(fileDate, startDate, endDate)) {
@@ -232,22 +304,52 @@ class TakeoutUploadService : Service() {
                                 if (sz > 0) totalSize += sz
                             }
                         }
+
+                        // 500개마다 진행 상태 저장 + 알림
                         if (scannedCount % 500 == 0) {
-                            notifyProgress("ZIP 분석 중... (${scannedCount}개 스캔, 미디어 ${mediaCount}개)", 0, 0)
-                            liveLog("분석 중: ${scannedCount}개 스캔, 미디어 ${mediaCount}개 발견")
+                            saveAnalyzeState(scannedCount, mediaCount, totalSize, jsonCount)
+                            saveJsonDateMap()
+                            notifyProgress("분석 중... (${scannedCount}개 스캔, 미디어 ${mediaCount}개, JSON ${jsonCount}개)", 0, 0)
+                            liveLog("분석 중: ${scannedCount}개 스캔, 미디어 ${mediaCount}개, JSON ${jsonCount}개")
                         }
                     }
                     entry = zis.nextZipEntry
                 }
                 zis.close()
 
-                liveLog("분석 완료: 전체 ${scannedCount}개 파일, 미디어 ${mediaCount}개")
+                if (!isActive) {
+                    // 중단됨 - 현재 상태 저장
+                    saveAnalyzeState(scannedCount, mediaCount, totalSize, jsonCount)
+                    saveJsonDateMap()
+                    liveLog("분석 중단됨 (${scannedCount}개 스캔 완료, 이어하기 가능)")
+                    notifyProgress("분석 중단 - 이어하기 가능", 0, 0)
+                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                        analyzeCallback?.invoke(-2, totalSize, scannedCount)  // -2 = 중단
+                    }
+                    stopForeground(STOP_FOREGROUND_DETACH)
+                    stopSelf()
+                    return@launch
+                }
+
+                // 완료
+                saveJsonDateMap()
+                clearAnalyzeState()
+                liveLog("분석 완료: 전체 ${scannedCount}개 파일, 미디어 ${mediaCount}개, JSON ${jsonCount}개")
                 notifyProgress("분석 완료: 미디어 ${mediaCount}개", 0, 0)
 
                 android.os.Handler(android.os.Looper.getMainLooper()).post {
                     analyzeCallback?.invoke(mediaCount, totalSize, scannedCount)
                 }
 
+                stopForeground(STOP_FOREGROUND_DETACH)
+                stopSelf()
+            } catch (e: CancellationException) {
+                // 중단 시에도 상태는 이미 500개 단위로 저장됨
+                liveLog("분석 중단됨 (이어하기 가능)")
+                notifyProgress("분석 중단 - 이어하기 가능", 0, 0)
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    analyzeCallback?.invoke(-2, 0L, 0)
+                }
                 stopForeground(STOP_FOREGROUND_DETACH)
                 stopSelf()
             } catch (e: Exception) {

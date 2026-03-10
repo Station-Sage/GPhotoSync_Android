@@ -525,6 +525,32 @@ class MainActivity : AppCompatActivity() {
             v.findViewById<TextView>(R.id.tvDateRange).text = "전체 기간 (필터 없음)"
             selectedZipUri?.let { onZipSelected(it) }
         }
+
+        v.findViewById<android.widget.Button>(R.id.btnStopAnalyze).setOnClickListener {
+            val stopIntent = Intent(this, TakeoutUploadService::class.java)
+            stopIntent.action = TakeoutUploadService.ACTION_STOP
+            startForegroundService(stopIntent)
+            v.findViewById<android.widget.Button>(R.id.btnStopAnalyze).visibility = View.GONE
+        }
+
+        v.findViewById<android.widget.Button>(R.id.btnResumeAnalyze).setOnClickListener {
+            val uri = selectedZipUri ?: return@setOnClickListener
+            v.findViewById<android.widget.Button>(R.id.btnResumeAnalyze).visibility = View.GONE
+            v.findViewById<android.widget.Button>(R.id.btnStopAnalyze).visibility = View.VISIBLE
+            v.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar).visibility = View.VISIBLE
+            v.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar).isIndeterminate = true
+            v.findViewById<TextView>(R.id.tvTakeoutProgress).visibility = View.VISIBLE
+            v.findViewById<TextView>(R.id.tvTakeoutProgress).text = "분석 이어하기..."
+            v.findViewById<TextView>(R.id.tvTakeoutStatus).text = "백그라운드에서 ZIP 분석 재개 중..."
+            appendTakeoutLog("분석 이어하기 시작...")
+
+            val intent = Intent(this, TakeoutUploadService::class.java)
+            intent.action = TakeoutUploadService.ACTION_ANALYZE_RESUME
+            intent.putExtra(TakeoutUploadService.EXTRA_ZIP_URI, uri.toString())
+            if (filterStartDate != null) intent.putExtra("start_date", filterStartDate)
+            if (filterEndDate != null) intent.putExtra("end_date", filterEndDate)
+            startForegroundService(intent)
+        }
     }
 
     private fun onZipSelected(uri: Uri) {
@@ -545,7 +571,17 @@ class MainActivity : AppCompatActivity() {
             val vv = takeoutView ?: return
             vv.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar).visibility = View.GONE
             vv.findViewById<TextView>(R.id.tvTakeoutProgress).visibility = View.GONE
-            if (mediaCount < 0) {
+            if (mediaCount == -2) {
+                // 분석 중단됨
+                vv.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar).visibility = View.GONE
+                vv.findViewById<TextView>(R.id.tvTakeoutProgress).visibility = View.GONE
+                vv.findViewById<TextView>(R.id.tvZipInfo).text = "분석 중단됨 (${scannedCount}개 스캔 완료)"
+                vv.findViewById<TextView>(R.id.tvTakeoutStatus).text = "이어하기 버튼으로 재개할 수 있습니다"
+                vv.findViewById<android.widget.Button>(R.id.btnResumeAnalyze).visibility = View.VISIBLE
+                vv.findViewById<android.widget.Button>(R.id.btnStopAnalyze).visibility = View.GONE
+                appendTakeoutLog("분석 중단됨 - 이어하기 가능")
+                return
+            } else if (mediaCount < 0) {
                 vv.findViewById<TextView>(R.id.tvZipInfo).text = "ZIP 분석 실패"
                 appendTakeoutLog("ZIP 분석 실패")
             } else {
@@ -560,6 +596,10 @@ class MainActivity : AppCompatActivity() {
             }
             vv.findViewById<TextView>(R.id.tvTakeoutStatus).text = "ZIP 파일을 선택 후 업로드하세요"
         }
+
+        // 분석 중단 버튼 표시
+        v.findViewById<android.widget.Button>(R.id.btnStopAnalyze).visibility = View.VISIBLE
+        v.findViewById<android.widget.Button>(R.id.btnResumeAnalyze).visibility = View.GONE
 
         // ForegroundService로 분석 실행
         val intent = Intent(this, TakeoutUploadService::class.java)
