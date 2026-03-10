@@ -93,6 +93,7 @@ class TakeoutTabHelper(
                     if (hasResumable) {
                         takeoutView.findViewById<Button>(R.id.btnMigrateFolder)?.visibility = View.VISIBLE
                     }
+                    takeoutView.findViewById<Button>(R.id.btnReanalyze)?.visibility = View.VISIBLE
                 } else {
                     takeoutView.findViewById<TextView>(R.id.tvZipInfo).text = "이전 ZIP 파일 선택됨 (분석 필요)"
                     appendTakeoutLog("이전 ZIP 파일 복원됨. 분석이 필요합니다.")
@@ -272,6 +273,18 @@ class TakeoutTabHelper(
             activity.startForegroundService(intent)
         }
 
+        takeoutView.findViewById<Button>(R.id.btnReanalyze)?.setOnClickListener {
+            val uri = selectedZipUri ?: return@setOnClickListener
+            // 분석 데이터 초기화
+            activity.getSharedPreferences("takeout_media_list", AppCompatActivity.MODE_PRIVATE).edit().clear().apply()
+            activity.getSharedPreferences("takeout_analyze", AppCompatActivity.MODE_PRIVATE).edit().clear().apply()
+            activity.getSharedPreferences("takeout_json_map", AppCompatActivity.MODE_PRIVATE).edit().clear().apply()
+            activity.getSharedPreferences("takeout_album_map", AppCompatActivity.MODE_PRIVATE).edit().clear().apply()
+            appendTakeoutLog("분석 데이터 초기화 완료. 재분석 시작...")
+            takeoutView.findViewById<Button>(R.id.btnReanalyze)?.visibility = View.GONE
+            onZipSelected(uri)
+        }
+
         takeoutView.findViewById<Button>(R.id.btnStopAnalyze).setOnClickListener {
             val stopIntent = Intent(activity, TakeoutUploadService::class.java)
             stopIntent.action = TakeoutUploadService.ACTION_STOP
@@ -380,6 +393,7 @@ class TakeoutTabHelper(
                 takeoutView.findViewById<Button>(R.id.btnStartTakeout).isEnabled = mediaCount > 0
                 appendTakeoutLog("분석 완료: 미디어 ${mediaCount}개 발견 (전체 ${scannedCount}개 파일)")
                 if (mediaCount == 0) appendTakeoutLog("미디어 파일이 없습니다. 날짜 필터를 확인하세요.")
+                takeoutView.findViewById<Button>(R.id.btnReanalyze)?.visibility = View.VISIBLE
                 val ac = activity.getSharedPreferences("takeout_album_map", AppCompatActivity.MODE_PRIVATE).getInt("c", 0)
                 if (ac > 0) appendTakeoutLog("앨범 ${ac}개 감지됨 - 업로드 후 앨범 정리 가능")
             }
