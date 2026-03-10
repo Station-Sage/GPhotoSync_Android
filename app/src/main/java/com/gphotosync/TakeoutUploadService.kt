@@ -413,14 +413,25 @@ class TakeoutUploadService : Service() {
     }
 
     private fun buildNotification(msg: String, done: Int, total: Int): Notification {
-        val pi = PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
-        val si = PendingIntent.getService(this, 1, Intent(this, TakeoutUploadService::class.java).apply { action = ACTION_STOP }, PendingIntent.FLAG_IMMUTABLE)
+        val pi = PendingIntent.getActivity(this, 0,
+            Intent(this, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra("OPEN_TAB", 3)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val si = PendingIntent.getService(this, 1,
+            Intent(this, TakeoutUploadService::class.java).apply { action = ACTION_STOP },
+            PendingIntent.FLAG_IMMUTABLE)
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("📦 Takeout → OneDrive").setContentText(msg)
-            .setSmallIcon(android.R.drawable.ic_menu_upload).setContentIntent(pi)
+            .setContentTitle("📦 Takeout → OneDrive")
+            .setContentText(msg)
+            .setSmallIcon(android.R.drawable.ic_menu_upload)
+            .setContentIntent(pi)
             .addAction(android.R.drawable.ic_media_pause, "중단", si)
             .setProgress(total, done, total == 0)
-            .setContentIntent(openPi).setOngoing(true).setOnlyAlertOnce(true).build()
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .build()
     }
 
     private fun createNotificationChannel() {
