@@ -55,7 +55,8 @@ class TakeoutUploadService : Service() {
         var migrateCallback: ((Int, Int, Int) -> Unit)? = null
         var skipOneDriveCheck: Boolean = false
         @Volatile var isRunning: Boolean = false
-        @Volatile var currentProgress: TakeoutProgress? = null   // (total, moved, errors)
+        @Volatile var currentProgress: TakeoutProgress? = null
+        @Volatile var uploadStartTime: Long = 0L   // (total, moved, errors)
     }
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -680,7 +681,7 @@ class TakeoutUploadService : Service() {
                 }
 
                 isRunning = true
-                val uploadStartTime = System.currentTimeMillis()
+                uploadStartTime = System.currentTimeMillis()
                 liveLog("미디어 ${total}개. 업로드 시작...")
                 notifyProgress("업로드 시작 (${total}개)", 0, total)
                 progressCallback?.invoke(TakeoutProgress(0, total, 0, false, null))
@@ -864,11 +865,14 @@ class TakeoutUploadService : Service() {
                                     saveDriveItemId(item.zipName, driveItemId)
                                     val pct = if (total > 0) d * 100 / total else 0
                                     val sizeKB = String.format("%.1f", item.fileSize / 1024.0)
+                                    val elapsedSec = (System.currentTimeMillis() - uploadStartTime) / 1000.0
+                                    val avgSpeed = if (elapsedSec > 0) String.format("%.1f", aDoneBytes.get() / 1048576.0 / elapsedSec) else "?"
                                     liveLog("✅ ${item.fn} (${sizeKB}KB)")
-                                    notifyProgress("업로드 $pct% - ${item.fn}", d, total)
+                                    notifyProgress("업로드 $pct% (${avgSpeed}MB/s) - ${item.fn}", d, total)
                                 } else {
                                     aDone.incrementAndGet(); aErrors.incrementAndGet()
-                                    liveLog("❌ ${item.fn}")
+                                    val reason = if (!folderOk) "폴더 생성 실패" else "업로드 실패 (3회 재시도)"
+                                    liveLog("❌ ${item.fn} - $reason")
                                 }
                                 val prog = TakeoutProgress(aDone.get(), total, aErrors.get(), false, null, aDoneBytes.get(), aSkipped.get())
                                 currentProgress = prog

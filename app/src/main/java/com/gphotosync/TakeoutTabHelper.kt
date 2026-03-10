@@ -447,7 +447,13 @@ class TakeoutTabHelper(
             pb.isIndeterminate = false; pb.max = progress.total; pb.progress = progress.done
             val pct = progress.done * 100 / progress.total
             val doneMB = String.format("%.1f", progress.doneBytes / 1024.0 / 1024.0)
-            tvProgress.text = "${progress.done}/${progress.total} ($pct%) | ${doneMB}MB"
+            val elapsed = (System.currentTimeMillis() - TakeoutUploadService.uploadStartTime) / 1000.0
+            val speedText = if (elapsed > 1 && progress.doneBytes > 0) {
+                val speed = progress.doneBytes / 1048576.0 / elapsed
+                String.format("%.1fMB/s", speed)
+            } else ""
+            val skipText = if (progress.skipped > 0) " 스킵:${progress.skipped}" else ""
+            tvProgress.text = "${progress.done}/${progress.total} ($pct%) | ${doneMB}MB $speedText$skipText"
         }
 
         if (progress.finished) {
