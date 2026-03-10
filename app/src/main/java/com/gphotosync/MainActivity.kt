@@ -24,6 +24,8 @@ import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.io.File
+import java.io.FileWriter
 
 class MainActivity : AppCompatActivity() {
 
@@ -59,6 +61,12 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { parseGoogleJson(it) }
+    }
+
+    private val authJsonPicker = registerForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let { importAuthFromJson(it) }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -362,6 +370,9 @@ class MainActivity : AppCompatActivity() {
             intent.putExtra(OAuthActivity.EXTRA_TYPE, "microsoft")
             msAuthLauncher.launch(intent)
         }
+        v.findViewById<android.widget.Button>(R.id.btnExportAuth).setOnClickListener { exportAuthToJson() }
+        v.findViewById<android.widget.Button>(R.id.btnImportAuth).setOnClickListener { authJsonPicker.launch("*/*") }
+
         v.findViewById<android.widget.Button>(R.id.btnReset).setOnClickListener {
             AlertDialog.Builder(this)
                 .setTitle("초기화")
@@ -518,6 +529,68 @@ class MainActivity : AppCompatActivity() {
             }
             .setNegativeButton("취소", null)
             .show()
+    }
+
+    private fun exportAuthToJson() {
+        val json = JSONObject()
+
+        // Google
+        val google = JSONObject()
+        TokenManager.get(TokenManager.KEY_G_CLIENT_ID)?.let { google.put("client_id", it) }
+        TokenManager.get(TokenManager.KEY_G_CLIENT_SECRET)?.let { google.put("client_secret", it) }
+        TokenManager.get(TokenManager.KEY_G_ACCESS)?.let { google.put("access_token", it) }
+        TokenManager.get(TokenManager.KEY_G_REFRESH)?.let { google.put("refresh_token", it) }
+        TokenManager.getLong(TokenManager.KEY_G_EXPIRY).let { if (it > 0) google.put("expires_at", it) }
+        json.put("google", google)
+
+        // Microsoft
+        val ms = JSONObject()
+        TokenManager.get(TokenManager.KEY_MS_CLIENT_ID)?.let { ms.put("client_id", it) }
+        TokenManager.get(TokenManager.KEY_MS_ACCESS)?.let { ms.put("access_token", it) }
+        TokenManager.get(TokenManager.KEY_MS_REFRESH)?.let { ms.put("refresh_token", it) }
+        TokenManager.getLong(TokenManager.KEY_MS_EXPIRY).let { if (it > 0) ms.put("expires_at", it) }
+        json.put("microsoft", ms)
+
+        try {
+            val dir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val file = File(dir, "gphotosync_auth.json")
+            FileWriter(file).use { it.write(json.toString(2)) }
+            Toast.makeText(this, "내보내기 완료: Download/gphotosync_auth.json", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "내보내기 실패: " + e.message, Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun importAuthFromJson(uri: Uri) {
+        try {
+            val inputStream = contentResolver.openInputStream(uri)
+            val jsonStr = inputStream?.bufferedReader()?.readText() ?: return
+            val json = JSONObject(jsonStr)
+
+            var count = 0
+
+            if (json.has("google")) {
+                val g = json.getJSONObject("google")
+                g.optString("client_id", "").let { if (it.isNotEmpty()) { TokenManager.save(TokenManager.KEY_G_CLIENT_ID, it); count++ } }
+                g.optString("client_secret", "").let { if (it.isNotEmpty()) { TokenManager.save(TokenManager.KEY_G_CLIENT_SECRET, it); count++ } }
+                g.optString("access_token", "").let { if (it.isNotEmpty()) { TokenManager.save(TokenManager.KEY_G_ACCESS, it); count++ } }
+                g.optString("refresh_token", "").let { if (it.isNotEmpty()) { TokenManager.save(TokenManager.KEY_G_REFRESH, it); count++ } }
+                if (g.has("expires_at")) { TokenManager.saveLong(TokenManager.KEY_G_EXPIRY, g.getLong("expires_at")); count++ }
+            }
+
+            if (json.has("microsoft")) {
+                val ms = json.getJSONObject("microsoft")
+                ms.optString("client_id", "").let { if (it.isNotEmpty()) { TokenManager.save(TokenManager.KEY_MS_CLIENT_ID, it); count++ } }
+                ms.optString("access_token", "").let { if (it.isNotEmpty()) { TokenManager.save(TokenManager.KEY_MS_ACCESS, it); count++ } }
+                ms.optString("refresh_token", "").let { if (it.isNotEmpty()) { TokenManager.save(TokenManager.KEY_MS_REFRESH, it); count++ } }
+                if (ms.has("expires_at")) { TokenManager.saveLong(TokenManager.KEY_MS_EXPIRY, ms.getLong("expires_at")); count++ }
+            }
+
+            updateAuthUI()
+            Toast.makeText(this, "가져오기 완료! (${count}개 항목 복원)", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "가져오기 실패: " + e.message, Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun parseGoogleJson(uri: Uri) {
