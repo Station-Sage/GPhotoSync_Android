@@ -53,7 +53,9 @@ class TakeoutUploadService : Service() {
         var analyzeCallback: ((Int, Long, Int) -> Unit)? = null
         var organizeCallback: ((Int, Int, Int) -> Unit)? = null  // (total, copied, errors)
         var migrateCallback: ((Int, Int, Int) -> Unit)? = null
-        var skipOneDriveCheck: Boolean = false   // (total, moved, errors)
+        var skipOneDriveCheck: Boolean = false
+        @Volatile var isRunning: Boolean = false
+        @Volatile var currentProgress: TakeoutProgress? = null   // (total, moved, errors)
     }
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -125,7 +127,7 @@ class TakeoutUploadService : Service() {
                 migrateMonthToYear()
             }
         }
-        return START_NOT_STICKY
+        return START_REDELIVER_INTENT
     }
 
     // === 스트림 드레인: 메모리에 올리지 않고 스트림 소비 ===
@@ -677,6 +679,7 @@ class TakeoutUploadService : Service() {
                     stopSelf(); return@launch
                 }
 
+                isRunning = true
                 val uploadStartTime = System.currentTimeMillis()
                 liveLog("미디어 ${total}개. 업로드 시작...")
                 notifyProgress("업로드 시작 (${total}개)", 0, total)
@@ -867,7 +870,9 @@ class TakeoutUploadService : Service() {
                                     aDone.incrementAndGet(); aErrors.incrementAndGet()
                                     liveLog("❌ ${item.fn}")
                                 }
-                                progressCallback?.invoke(TakeoutProgress(aDone.get(), total, aErrors.get(), false, null, aDoneBytes.get(), aSkipped.get()))
+                                val prog = TakeoutProgress(aDone.get(), total, aErrors.get(), false, null, aDoneBytes.get(), aSkipped.get())
+                                currentProgress = prog
+                                progressCallback?.invoke(prog)
                             } finally { item.tmpFile?.delete() }
                         }
                     }
@@ -892,8 +897,10 @@ class TakeoutUploadService : Service() {
                 liveLog(msg)
                 (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIF_ID, buildDoneNotification("✅ $msg"))
                 progressCallback?.invoke(TakeoutProgress(done, total, errors, true, null, doneBytes, skipped))
+                isRunning = false
                 withContext(Dispatchers.Main) { stopForeground(STOP_FOREGROUND_DETACH); stopSelf() }
             } catch (e: CancellationException) {
+                isRunning = false
                 flushUploadedFiles()
                 flushDriveItemIds()
                 liveLog("업로드 중단됨 (이어하기 가능)")

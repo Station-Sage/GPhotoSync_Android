@@ -104,6 +104,27 @@ class TakeoutTabHelper(
     }
 
     fun restoreState() {
+        // 서비스가 실행 중이면 현재 progress 복원
+        if (TakeoutUploadService.isRunning && TakeoutUploadService.currentProgress != null) {
+            val p = TakeoutUploadService.currentProgress!!
+            isTakeoutUploading = true
+            lastTakeoutProgress = p
+            setupCallbacks()
+            val pb = takeoutView.findViewById<ProgressBar>(R.id.takeoutProgressBar)
+            pb.visibility = View.VISIBLE
+            if (p.total > 0) {
+                pb.isIndeterminate = false; pb.max = p.total; pb.progress = p.done
+                val pct = p.done * 100 / p.total
+                val doneMB = String.format("%.1f", p.doneBytes / 1024.0 / 1024.0)
+                takeoutView.findViewById<TextView>(R.id.tvTakeoutProgress).visibility = View.VISIBLE
+                takeoutView.findViewById<TextView>(R.id.tvTakeoutProgress).text = "${p.done}/${p.total} ($pct%) | ${doneMB}MB"
+            }
+            takeoutView.findViewById<TextView>(R.id.tvTakeoutStatus).visibility = View.VISIBLE
+            takeoutView.findViewById<TextView>(R.id.tvTakeoutStatus).text = "업로드 중..."
+            takeoutView.findViewById<Button>(R.id.btnStopTakeout).visibility = View.VISIBLE
+            takeoutView.findViewById<Button>(R.id.btnStartTakeout).isEnabled = false
+        }
+
         if (takeoutLogLines.isNotEmpty()) {
             takeoutView.findViewById<TextView>(R.id.tvTakeoutLog).text = takeoutLogLines.joinToString("\n")
             val sv = takeoutView.findViewById<ScrollView>(R.id.scrollTakeoutLog)
