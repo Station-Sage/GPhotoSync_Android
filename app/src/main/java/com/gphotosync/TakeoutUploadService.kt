@@ -279,7 +279,7 @@ class TakeoutUploadService : Service() {
 
                 saveJsonDateMap(); saveMediaList(mediaNames); clearAnalyzeState()
                 liveLog("분석 완료: 전체 ${sc}개, 미디어 ${mediaCount}개, JSON ${jsonCount}개")
-                notifyProgress("분석 완료: 미디어 ${mediaCount}개", 0, 0)
+                (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIF_ID, buildDoneNotification("✅ 분석 완료: 미디어 ${mediaCount}개"))
                 android.os.Handler(android.os.Looper.getMainLooper()).post { analyzeCallback?.invoke(mediaCount, totalSize, sc) }
                 stopForeground(STOP_FOREGROUND_DETACH); stopSelf()
             } catch (e: CancellationException) {
@@ -418,7 +418,8 @@ class TakeoutUploadService : Service() {
                 clearMediaList()
                 val ok = done - errors - skipped
                 val msg = "완료! 성공:$ok 스킵:$skipped 실패:$errors (전체:$total)"
-                liveLog(msg); notifyProgress(msg, done, total)
+                liveLog(msg)
+                (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIF_ID, buildDoneNotification("✅ $msg"))
                 progressCallback?.invoke(TakeoutProgress(done, total, errors, true, null, doneBytes, skipped))
                 withContext(Dispatchers.Main) { stopForeground(STOP_FOREGROUND_DETACH); stopSelf() }
             } catch (e: CancellationException) {
@@ -435,6 +436,23 @@ class TakeoutUploadService : Service() {
 
     private fun notifyProgress(msg: String, done: Int, total: Int) {
         (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIF_ID, buildNotification(msg, done, total))
+    }
+
+    private fun buildDoneNotification(msg: String): Notification {
+        val openIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra("OPEN_TAB", 3)
+        }
+        val openPi = PendingIntent.getActivity(this, 0, openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        return NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("📦 Takeout → OneDrive")
+            .setContentText(msg)
+            .setSmallIcon(android.R.drawable.ic_menu_upload)
+            .setContentIntent(openPi)
+            .setOngoing(false)
+            .setAutoCancel(true)
+            .build()
     }
 
     private fun buildNotification(msg: String, done: Int, total: Int): Notification {
