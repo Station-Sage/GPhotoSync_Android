@@ -253,8 +253,7 @@ class TakeoutUploadService : Service() {
             if (title.isNotEmpty() && ts > 0) {
                 val d = java.util.Date(ts * 1000)
                 val y = java.text.SimpleDateFormat("yyyy", java.util.Locale.getDefault()).format(d)
-                val m = java.text.SimpleDateFormat("MM", java.util.Locale.getDefault()).format(d)
-                return Pair(title, "$y/$m")
+                return Pair(title, y)
             }
         } catch (_: Exception) {}
         return null
@@ -264,7 +263,6 @@ class TakeoutUploadService : Service() {
     // Takeout ZIP 경로에서 앨범명 추출
     // "Takeout/Google Photos/Photos from 2024/file.jpg" → null (날짜 폴더)
     // "Takeout/Google Photos/여행 2023/file.jpg" → "여행 2023" (앨범)
-    private val datefolderPattern = Regex("""Photos from \d{4}""")
     private val dateFolderPatterns = listOf(
         Regex("""Photos from \d{4}"""),
         Regex("""^\d{4}년\s*\d{1,2}월\s*\d{1,2}일$"""),
@@ -605,13 +603,9 @@ class TakeoutUploadService : Service() {
                         while (e4 != null && isActive) {
                             if (!e4.isDirectory && e4.name in mediaNames) {
                                 val fn = e4.name.substringAfterLast('/')
-                                val albumName = extractAlbumName(e4.name)
-                                val fp = if (albumName != null) {
-                                    "${api.rootFolder}/Albums/$albumName"
-                                } else {
-                                    val ym = yearOnly(fn, e4.name)
-                                    "${api.rootFolder}/$ym"
-                                }
+                                // 모든 파일은 연도 폴더에 업로드 (앨범은 bundle로 별도 생성)
+                                val ym = yearOnly(fn, e4.name)
+                                val fp = "${api.rootFolder}/$ym"
 
                                 if (e4.name in uploaded) {
                                     val d = aDone.incrementAndGet()

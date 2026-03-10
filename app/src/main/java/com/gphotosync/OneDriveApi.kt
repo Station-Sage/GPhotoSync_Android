@@ -284,8 +284,12 @@ class OneDriveApi(private val context: Context) {
             val encodedPath = filePath.trim('/').split("/").joinToString("/") {
                 URLEncoder.encode(it, "UTF-8").replace("+", "%20")
             }
+            val itemUrl = "$GRAPH/me/drive/root:/$encodedPath"
+            val httpUrl = okhttp3.HttpUrl.parse(itemUrl)!!.newBuilder()
+                .addQueryParameter("\$select", "id")
+                .build()
             val req = Request.Builder()
-                .url("$GRAPH/me/drive/root:/$encodedPath?\$select=id")
+                .url(httpUrl)
                 .header("Authorization", "Bearer $token")
                 .get().build()
             client.newCall(req).enqueue(object : Callback {
@@ -307,31 +311,80 @@ class OneDriveApi(private val context: Context) {
      * @param name 앨범 이름
      * @param childIds driveItem id 목록
      */
+    /**
+     * OneDrive 앨범(bundle) 생성 — 용량 0, 참조만
+     * 200개 초과 시 먼저 생성 후 나머지를 PATCH로 추가
+     */
     fun createAlbum(name: String, childIds: List<String>, callback: (Boolean) -> Unit) {
+        if (childIds.isEmpty()) { callback(false); return }
         TokenManager.getValidMicrosoftToken(client) { token ->
             if (token == null) { logToFile("[OD] createAlbum token NULL"); callback(false); return@getValidMicrosoftToken }
+
+            val batchSize = 150
+            val firstBatch = childIds.take(batchSize)
+            val remaining = childIds.drop(batchSize)
+
             val children = JSONArray()
-            for (id in childIds) { children.put(JSONObject().put("id", id)) }
+            for (id in firstBatch) { children.put(JSONObject().put("id", id)) }
             val body = JSONObject().apply {
                 put("name", name)
                 put("@microsoft.graph.conflictBehavior", "rename")
                 put("bundle", JSONObject().put("album", JSONObject()))
                 put("children", children)
             }.toString().toRequestBody("application/json".toMediaType())
+
             val req = Request.Builder()
                 .url("$GRAPH/me/drive/bundles")
                 .header("Authorization", "Bearer $token")
                 .post(body).build()
+
             client.newCall(req).enqueue(object : Callback {
                 override fun onFailure(call: Call, e: IOException) { logToFile("[OD] createAlbum fail: ${e.message}"); callback(false) }
                 override fun onResponse(call: Call, response: Response) {
                     response.use {
-                        logToFile("[OD] createAlbum resp=${it.code} ${it.body?.string()?.take(300)}")
-                        callback(it.code in 200..201)
+                        val respBody = it.body?.string()
+                        logToFile("[OD] createAlbum resp=${it.code} ${respBody?.take(300)}")
+                        if (it.code !in 200..201) { callback(false); return }
+
+                        if (remaining.isEmpty()) { callback(true); return }
+
+                        // 나머지를 PATCH로 추가
+                        val bundleId = try { JSONObject(respBody ?: "{}").optString("id", "") } catch (_: Exception) { "" }
+                        if (bundleId.isEmpty()) { callback(true); return } // 생성은 됐으므로 true
+
+                        addChildrenToBundleBatch(token, bundleId, remaining, 0, batchSize, callback)
                     }
                 }
             })
         }
+    }
+
+    private fun addChildrenToBundleBatch(token: String, bundleId: String, ids: List<String>, offset: Int, batchSize: Int, callback: (Boolean) -> Unit) {
+        if (offset >= ids.size) { callback(true); return }
+        val batch = ids.subList(offset, minOf(offset + batchSize, ids.size))
+        val children = JSONArray()
+        for (id in batch) { children.put(JSONObject().put("id", id)) }
+        val body = JSONObject().apply {
+            put("children@odata.bind", children)
+        }
+
+        // POST children to bundle
+        for (id in batch) {
+            val childBody = JSONObject().put("id", id).toString().toRequestBody("application/json".toMediaType())
+            val req = Request.Builder()
+                .url("$GRAPH/me/drive/items/$bundleId/children/\$ref")
+                .header("Authorization", "Bearer $token")
+                .post(childBody).build()
+            // 동기 호출 (이미 백그라운드 스레드)
+            try {
+                client.newCall(req).execute().use { resp ->
+                    logToFile("[OD] addChild resp=${resp.code}")
+                }
+            } catch (e: Exception) {
+                logToFile("[OD] addChild fail: ${e.message}")
+            }
+        }
+        addChildrenToBundleBatch(token, bundleId, ids, offset + batchSize, batchSize, callback)
     }
 
     val rootFolder: String get() = ROOT_FOLDER
