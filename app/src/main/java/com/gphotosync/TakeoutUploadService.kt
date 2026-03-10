@@ -78,7 +78,7 @@ class TakeoutUploadService : Service() {
     }
 
     private fun extractDateFromName(filename: String, path: String): String? {
-        val pattern = Regex("((?:19|20)\d{2})[\-_]?(\d{2})[\-_]?(\d{2})")
+        val pattern = Regex("""((?:19|20)\d{2})[\-_]?(\d{2})[\-_]?(\d{2})""")
         val match = pattern.find(filename) ?: pattern.find(path) ?: return null
         return "${match.groupValues[1]}-${match.groupValues[2]}-${match.groupValues[3]}"
     }

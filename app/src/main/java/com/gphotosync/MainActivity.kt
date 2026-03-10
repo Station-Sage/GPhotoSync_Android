@@ -523,7 +523,7 @@ class MainActivity : AppCompatActivity() {
                 var entry = zis.nextEntry
                 val startD = filterStartDate
                 val endD = filterEndDate
-                val yearPattern = Regex("((?:19|20)\d{2})[\-_]?(\d{2})[\-_]?(\d{2})")
+                val yearPattern = Regex("""((?:19|20)\d{2})[\-_]?(\d{2})[\-_]?(\d{2})""")
                 while (entry != null) {
                     if (!entry.isDirectory) {
                         val ext = entry.name.substringAfterLast('.', "").lowercase()
