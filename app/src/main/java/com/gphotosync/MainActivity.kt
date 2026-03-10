@@ -471,7 +471,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         v.findViewById<android.widget.Button>(R.id.btnSelectZip).setOnClickListener {
-            zipFilePicker.launch("application/zip")
+            zipFilePicker.launch("*/*")
         }
 
         v.findViewById<android.widget.Button>(R.id.btnStartTakeout).setOnClickListener {
