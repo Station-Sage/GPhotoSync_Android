@@ -574,8 +574,7 @@ class MainActivity : AppCompatActivity() {
         if (takeoutLogLines.size > 50) takeoutLogLines.removeAt(0)
         val v = takeoutView ?: return
         val tv = v.findViewById<TextView>(R.id.tvTakeoutLog)
-        tv.text = takeoutLogLines.joinToString("
-")
+        tv.text = takeoutLogLines.joinToString("\n")
         val sv = v.findViewById<ScrollView>(R.id.scrollTakeoutLog)
         sv.post { sv.fullScroll(View.FOCUS_DOWN) }
     }
