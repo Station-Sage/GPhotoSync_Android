@@ -469,6 +469,47 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ======== TAKEOUT TAB ========
+    private fun restorePreviousSession(v: View) {
+        val prefs = getSharedPreferences("takeout_session", MODE_PRIVATE)
+        val savedUri = prefs.getString("zip_uri", null)
+        if (savedUri != null && selectedZipUri == null) {
+            try {
+                val uri = android.net.Uri.parse(savedUri)
+                // URI 접근 가능한지 확인
+                contentResolver.openFileDescriptor(uri, "r")?.close()
+                selectedZipUri = uri
+
+                val savedMedia = getSharedPreferences("takeout_media_list", MODE_PRIVATE)
+                    .getStringSet("names", emptySet()) ?: emptySet()
+                if (savedMedia.isNotEmpty()) {
+                    val savedSize = getSharedPreferences("takeout_analyze", MODE_PRIVATE).getLong("ts", 0L)
+                    val sizeMB = String.format("%.1f", savedSize / 1024.0 / 1024.0)
+                    val sizeText = if (savedSize > 0) " (약 ${sizeMB}MB)" else ""
+                    lastZipInfoText = "미디어 파일: ${savedMedia.size}개${sizeText} (이전 분석 결과)"
+                    v.findViewById<TextView>(R.id.tvZipInfo).text = lastZipInfoText
+                    v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = true
+                    v.findViewById<TextView>(R.id.tvTakeoutStatus).text = "이전 분석 결과 로드 완료. 업로드 가능합니다."
+                    appendTakeoutLog("이전 세션 복원: 미디어 ${savedMedia.size}개${sizeText}")
+
+                    // 이어하기 가능 여부 확인
+                    val hasResumable = getSharedPreferences("takeout_progress", MODE_PRIVATE)
+                        .getStringSet("uf", emptySet())?.isNotEmpty() == true
+                    if (hasResumable) {
+                        v.findViewById<android.widget.Button>(R.id.btnResumeTakeout).visibility = View.VISIBLE
+                        appendTakeoutLog("이전 업로드 이어하기 가능")
+                    }
+                } else {
+                    // 분석 결과는 없지만 URI는 복원
+                    v.findViewById<TextView>(R.id.tvZipInfo).text = "이전 ZIP 파일 선택됨 (분석 필요)"
+                    appendTakeoutLog("이전 ZIP 파일 복원됨. 분석이 필요합니다.")
+                }
+            } catch (e: Exception) {
+                // URI 접근 불가 (앱 재설치 등) - 무시
+                prefs.edit().remove("zip_uri").apply()
+            }
+        }
+    }
+
     private fun restoreTakeoutState() {
         val v = takeoutView ?: return
 
@@ -556,6 +597,9 @@ class MainActivity : AppCompatActivity() {
     private fun setupTakeoutTab() {
         val v = takeoutView ?: return
 
+        // 이전 세션의 ZIP URI 및 분석 결과 복원
+        restorePreviousSession(v)
+
         v.findViewById<android.widget.Button>(R.id.btnOpenTakeout).setOnClickListener {
             val url = "https://takeout.google.com/settings/takeout/custom/photo"
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
@@ -614,6 +658,8 @@ class MainActivity : AppCompatActivity() {
             v.findViewById<android.widget.Button>(R.id.btnStartDate).text = "시작일 선택"
             v.findViewById<android.widget.Button>(R.id.btnEndDate).text = "종료일 선택"
             v.findViewById<TextView>(R.id.tvDateRange).text = "전체 기간 (필터 없음)"
+            // 날짜 필터 변경 시 이전 분석 결과 무효화
+            getSharedPreferences("takeout_media_list", MODE_PRIVATE).edit().clear().apply()
             selectedZipUri?.let { onZipSelected(it) }
         }
 
@@ -850,6 +896,8 @@ class MainActivity : AppCompatActivity() {
             val start = filterStartDate ?: "처음"
             val end = filterEndDate ?: "끝"
             v.findViewById<TextView>(R.id.tvDateRange).text = "$start ~ $end"
+            // 날짜 변경 시 이전 분석 결과 무효화
+            getSharedPreferences("takeout_media_list", MODE_PRIVATE).edit().clear().apply()
             selectedZipUri?.let { onZipSelected(it) }
         }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
     }
