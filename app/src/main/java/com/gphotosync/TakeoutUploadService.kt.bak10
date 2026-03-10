@@ -293,7 +293,8 @@ class TakeoutUploadService : Service() {
 
     private fun yearOnly(filename: String, path: String): String {
         jsonDateMap[filename]?.let {
-            return it
+            // "2024/01" → "2024"
+            return it.substringBefore("/")
         }
         val yr = Regex("""((?:19|20)\d{2})""")
         (yr.find(filename) ?: yr.find(path))?.let { return it.groupValues[1] }

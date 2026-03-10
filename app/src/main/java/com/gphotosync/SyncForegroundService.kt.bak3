@@ -7,8 +7,6 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.*
-import kotlin.coroutines.suspendCoroutine
-import kotlin.coroutines.resume
 
 class SyncForegroundService : Service() {
 
@@ -23,7 +21,6 @@ class SyncForegroundService : Service() {
         var retryItems: List<SyncRecord>? = null
         var logCallback: ((String) -> Unit)? = null
         var currentSessionId: String = ""
-        private val createdFolders = mutableSetOf<String>()
     }
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -127,10 +124,10 @@ class SyncForegroundService : Service() {
         var sessionId: String? = null
         var pickerUri: String? = null
         var sessionDone = false
-        val sessionResult = suspendCoroutine<Pair<String?, String?>> { cont ->
-            googleApi.createSession { sid, uri -> cont.resume(Pair(sid, uri)) }
+        googleApi.createSession { sid, uri ->
+            sessionId = sid; pickerUri = uri; sessionDone = true
         }
-        sessionId = sessionResult.first; pickerUri = sessionResult.second
+        while (!sessionDone && scope.isActive) delay(200)
 
         if (sessionId == null || pickerUri == null) {
             logToFile("fullSync - session creation failed")
@@ -151,9 +148,11 @@ class SyncForegroundService : Service() {
         var mediaReady = false
         while (!mediaReady && scope.isActive) {
             delay(3000)
-            mediaReady = suspendCoroutine<Boolean> { cont ->
-                googleApi.pollSession(sessionId!!) { ready -> cont.resume(ready) }
+            var pollDone = false
+            googleApi.pollSession(sessionId!!) { ready ->
+                mediaReady = ready; pollDone = true
             }
+            while (!pollDone && scope.isActive) delay(200)
             logToFile("fullSync - polling, mediaReady=$mediaReady")
         }
 
@@ -161,12 +160,13 @@ class SyncForegroundService : Service() {
 
         notifyProgress("선택된 사진 목록 가져오는 중...", 0, 0)
         liveLog("선택된 사진 목록 가져오는 중...")
-        val allItems: List<MediaItem> = suspendCoroutine<List<MediaItem>> { cont ->
-            googleApi.listPickedMedia(sessionId!!,
-                onDone = { items -> cont.resume(items) },
-                onError = { err -> logToFile("listPickedMedia error: $err"); cont.resume(emptyList()) }
-            )
-        }
+        var allItems: List<MediaItem> = emptyList()
+        var listDone = false
+        googleApi.listPickedMedia(sessionId!!,
+            onDone = { items -> allItems = items; listDone = true },
+            onError = { err -> logToFile("listPickedMedia error: $err"); listDone = true }
+        )
+        while (!listDone && scope.isActive) delay(200)
 
         logToFile("fullSync - picked items: ${allItems.size}")
         
@@ -194,9 +194,10 @@ class SyncForegroundService : Service() {
                 continue
             }
 
-            val fileData: ByteArray? = suspendCoroutine<ByteArray?> { cont ->
-                googleApi.downloadMedia(item) { data -> cont.resume(data) }
-            }
+            var fileData: ByteArray? = null
+            var dlDone = false
+            googleApi.downloadMedia(item) { data -> fileData = data; dlDone = true }
+            while (!dlDone && scope.isActive) delay(100)
 
             if (fileData == null) {
                 errors++; done++
@@ -214,26 +215,20 @@ class SyncForegroundService : Service() {
                 continue
             }
 
-            val yearFolder = extractYear(item.filename, item.year)
-            val folderPath = "${oneDriveApi.rootFolder}/$yearFolder"
+            val yearMonth = extractYearMonth(item.filename, item.year)
+            val folderPath = "${oneDriveApi.rootFolder}/$yearMonth"
+            var uploadDone = false
             var uploadOk = false
-
-            // 폴더 캐시로 불필요한 ensureFolder 호출 방지
-            val folderCached = synchronized(createdFolders) { folderPath in createdFolders }
-            val folderOk = if (folderCached) true else {
-                val result = suspendCoroutine<Boolean> { cont ->
-                    oneDriveApi.ensureFolder(folderPath) { cont.resume(it) }
-                }
-                if (result) synchronized(createdFolders) { createdFolders.add(folderPath) }
-                result
+            logToFile("[SYNC] ensureFolder calling: $folderPath")
+            oneDriveApi.ensureFolder(folderPath) { folderOk ->
+                logToFile("[SYNC] ensureFolder result: $folderOk")
+                if (folderOk) {
+                    oneDriveApi.uploadFile(fileData!!, item.filename, folderPath) { ok ->
+                        uploadOk = ok != null
+                    }
+                } else { uploadDone = true }
             }
-
-            if (folderOk) {
-                val driveId = suspendCoroutine<String?> { cont ->
-                    oneDriveApi.uploadFile(fileData!!, item.filename, folderPath) { cont.resume(it) }
-                }
-                uploadOk = driveId != null
-            }
+            while (!uploadDone && scope.isActive) delay(100)
 
             if (uploadOk) {
                 synced.add(item.id)
@@ -281,10 +276,12 @@ class SyncForegroundService : Service() {
         for (record in failedItems) {
             if (!scope.isActive) break
 
+            var fileData: ByteArray? = null
+            var dlDone = false
+
             val item = MediaItem(record.id, record.filename, "", "", "", false)
-            val fileData: ByteArray? = suspendCoroutine<ByteArray?> { cont ->
-                googleApi.downloadMedia(item) { data -> cont.resume(data) }
-            }
+            googleApi.downloadMedia(item) { data -> fileData = data; dlDone = true }
+            while (!dlDone && scope.isActive) delay(100)
 
             if (fileData == null) {
                 errors++
@@ -294,25 +291,23 @@ class SyncForegroundService : Service() {
                 continue
             }
 
-            val year = extractYear(record.filename, record.filename.take(4).let { if (it.all { c -> c.isDigit() }) it else "unknown" })
+            val year = record.filename.take(4).let { if (it.all { c -> c.isDigit() }) it else "unknown" }
             val folderPath = "${oneDriveApi.rootFolder}/$year"
+            var uploadDone = false
             var uploadOk = false
-
-            val folderCached = synchronized(createdFolders) { folderPath in createdFolders }
-            val folderOk = if (folderCached) true else {
-                val result = suspendCoroutine<Boolean> { cont ->
-                    oneDriveApi.ensureFolder(folderPath) { cont.resume(it) }
+            logToFile("[SYNC] ensureFolder calling: $folderPath")
+            oneDriveApi.ensureFolder(folderPath) { folderOk ->
+                logToFile("[SYNC] ensureFolder result: $folderOk")
+                if (folderOk) {
+                    oneDriveApi.uploadFile(fileData!!, record.filename, folderPath) { ok ->
+                        uploadOk = ok != null
+                        uploadDone = true
+                    }
+                } else {
+                    uploadDone = true
                 }
-                if (result) synchronized(createdFolders) { createdFolders.add(folderPath) }
-                result
             }
-
-            if (folderOk) {
-                val driveId = suspendCoroutine<String?> { cont ->
-                    oneDriveApi.uploadFile(fileData!!, record.filename, folderPath) { cont.resume(it) }
-                }
-                uploadOk = driveId != null
-            }
+            while (!uploadDone && scope.isActive) delay(100)
 
             if (uploadOk) {
                 synced.add(record.id)
@@ -375,11 +370,14 @@ class SyncForegroundService : Service() {
         }
     }
 
-    private fun extractYear(filename: String, year: String): String {
-        val yrPattern = Regex("""((?:19|20)\d{2})""")
-        val match = yrPattern.find(filename)
-        if (match != null) return match.groupValues[1]
-        return if (year != "unknown") year else "unknown"
+    private fun extractYearMonth(filename: String, year: String): String {
+        val ymPattern = Regex("""((?:19|20)\d{2})[-_]?(\d{2})[-_]?\d{2}""")
+        val match = ymPattern.find(filename)
+        if (match != null) {
+            return "${match.groupValues[1]}/${match.groupValues[2]}"
+        }
+        // 월을 못 찾으면 연도만
+        return if (year != "unknown") "$year/unknown" else "unknown"
     }
 
     override fun onDestroy() {

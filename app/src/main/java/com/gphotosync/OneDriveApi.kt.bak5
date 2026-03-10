@@ -320,31 +320,6 @@ class OneDriveApi(private val context: Context) {
         TokenManager.getValidMicrosoftToken(client) { token ->
             if (token == null) { logToFile("[OD] createAlbum token NULL"); callback(false); return@getValidMicrosoftToken }
 
-            // 기존 번들(앨범) 검색 — 이미 존재하면 children만 추가
-            val searchUrl = "$GRAPH/me/drive/bundles?\$filter=name eq '$name'&\$select=id,name"
-            try {
-                val searchReq = Request.Builder()
-                    .url(searchUrl)
-                    .header("Authorization", "Bearer $token")
-                    .get().build()
-                val searchResp = client.newCall(searchReq).execute()
-                searchResp.use { sr ->
-                    if (sr.code == 200) {
-                        val arr = JSONObject(sr.body?.string() ?: "{}").optJSONArray("value")
-                        if (arr != null && arr.length() > 0) {
-                            val existingId = arr.getJSONObject(0).optString("id", "")
-                            if (existingId.isNotEmpty()) {
-                                logToFile("[OD] createAlbum: '$name' already exists ($existingId), adding children")
-                                addChildrenToBundleBatch(token, existingId, childIds, 0, 150, callback)
-                                return@getValidMicrosoftToken
-                            }
-                        }
-                    }
-                }
-            } catch (e: Exception) {
-                logToFile("[OD] createAlbum search failed: ${e.message}, creating new")
-            }
-
             val batchSize = 150
             val firstBatch = childIds.take(batchSize)
             val remaining = childIds.drop(batchSize)
@@ -353,7 +328,7 @@ class OneDriveApi(private val context: Context) {
             for (id in firstBatch) { children.put(JSONObject().put("id", id)) }
             val body = JSONObject().apply {
                 put("name", name)
-                put("@microsoft.graph.conflictBehavior", "fail")
+                put("@microsoft.graph.conflictBehavior", "rename")
                 put("bundle", JSONObject().put("album", JSONObject()))
                 put("children", children)
             }.toString().toRequestBody("application/json".toMediaType())
@@ -387,32 +362,29 @@ class OneDriveApi(private val context: Context) {
     private fun addChildrenToBundleBatch(token: String, bundleId: String, ids: List<String>, offset: Int, batchSize: Int, callback: (Boolean) -> Unit) {
         if (offset >= ids.size) { callback(true); return }
         val batch = ids.subList(offset, minOf(offset + batchSize, ids.size))
-        var failCount = 0
+        val children = JSONArray()
+        for (id in batch) { children.put(JSONObject().put("id", id)) }
+        val body = JSONObject().apply {
+            put("children@odata.bind", children)
+        }
+
+        // POST children to bundle
         for (id in batch) {
-            val childBody = JSONObject().apply {
-                put("id", id)
-            }.toString().toRequestBody("application/json".toMediaType())
-            val url = "$GRAPH/me/drive/items/$bundleId/children"
+            val childBody = JSONObject().put("id", id).toString().toRequestBody("application/json".toMediaType())
             val req = Request.Builder()
-                .url(url)
+                .url("$GRAPH/me/drive/items/$bundleId/children/\$ref")
                 .header("Authorization", "Bearer $token")
                 .post(childBody).build()
+            // 동기 호출 (이미 백그라운드 스레드)
             try {
                 client.newCall(req).execute().use { resp ->
                     logToFile("[OD] addChild resp=${resp.code}")
-                    if (resp.code !in 200..204) failCount++
                 }
             } catch (e: Exception) {
                 logToFile("[OD] addChild fail: ${e.message}")
-                failCount++
             }
         }
-        if (failCount == batch.size) {
-            logToFile("[OD] addChildrenBatch all failed at offset=$offset")
-            callback(false)
-        } else {
-            addChildrenToBundleBatch(token, bundleId, ids, offset + batchSize, batchSize, callback)
-        }
+        addChildrenToBundleBatch(token, bundleId, ids, offset + batchSize, batchSize, callback)
     }
 
     val rootFolder: String get() = ROOT_FOLDER
