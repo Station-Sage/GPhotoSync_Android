@@ -7,6 +7,9 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
+import kotlin.coroutines.suspendCoroutine
+import kotlin.coroutines.resume
 import java.io.InputStream
 import java.io.ByteArrayOutputStream
 import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
@@ -51,6 +54,14 @@ class TakeoutUploadService : Service() {
     private var job: Job? = null
     private val jsonDateMap = mutableMapOf<String, String>()
     private val createdFolders = mutableSetOf<String>()
+
+    // === OkHttp 콜백 → suspend 변환 ===
+    private suspend fun ensureFolderSuspend(api: OneDriveApi, path: String): Boolean =
+        suspendCoroutine { cont -> api.ensureFolder(path) { cont.resume(it) } }
+
+    private suspend fun uploadFileSuspend(api: OneDriveApi, data: ByteArray, fn: String, fp: String): Boolean =
+        suspendCoroutine { cont -> api.uploadFile(data, fn, fp) { cont.resume(it) } }
+
 
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onCreate() { super.onCreate(); createNotificationChannel() }
@@ -153,8 +164,7 @@ class TakeoutUploadService : Service() {
 
     private fun addUploadedFile(name: String) {
         pendingUploaded.add(name)
-        // 매 파일 즉시 flush (크래시/강제종료 시 손실 방지)
-        flushUploadedFiles()
+        if (pendingUploaded.size >= 5) flushUploadedFiles()
     }
 
     private fun flushUploadedFiles() {
@@ -541,92 +551,108 @@ class TakeoutUploadService : Service() {
                 }
 
                 var done = 0; var errors = 0; var skipped = 0; var doneBytes = 0L
-                val zis4 = ZipArchiveInputStream(contentResolver.openInputStream(zipUri))
-                var e4 = zis4.nextZipEntry
 
-                while (e4 != null && isActive) {
-                    if (!e4.isDirectory && e4.name in mediaNames) {
-                        val fn = e4.name.substringAfterLast('/')
-                        val albumName = extractAlbumName(e4.name)
-                        val fp = if (albumName != null) {
-                            "${api.rootFolder}/Albums/$albumName"
-                        } else {
-                            val ym = yearMonth(fn, e4.name)
-                            "${api.rootFolder}/$ym"
-                        }
+                // 파이프라인: ZIP 읽기 → Channel → 병렬 업로드 (3 workers)
+                data class UploadItem(val zipName: String, val fn: String, val fp: String, val data: ByteArray, val fileSize: Long, val tmpFile: java.io.File?)
+                val channel = Channel<UploadItem>(3) // 버퍼 3개
 
-                        if (e4.name in uploaded) {
-                            done++; skipped++
-                            if (skipped % 100 == 0 || skipped == 1) {
-                                val pct = if (total > 0) done * 100 / total else 0
-                                notifyProgress("스킵 중 ($pct%) ${skipped}개 완료", done, total)
-                                progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null, doneBytes, skipped))
-                            }
-                            drain(zis4); e4 = zis4.nextZipEntry; continue
-                        }
-
-                        val pathInfo = if (albumName != null) "앨범:$albumName" else yearMonth(fn, e4.name)
-                        liveLog("[$done/$total] $fn ($pathInfo)")
-
-                        // 스트리밍 읽기: 먼저 4MB까지 메모리에 시도, 초과 시 tmpFile로 전환
-                        val threshold = 4 * 1024 * 1024
-                        val baos = java.io.ByteArrayOutputStream(65536)
-                        var tmpFile: java.io.File? = null
-                        var tmpOut: java.io.OutputStream? = null
-                        val buf = ByteArray(32768)
-                        var totalRead = 0L
-                        var n = zis4.read(buf)
-                        while (n != -1) {
-                            totalRead += n
-                            if (tmpOut != null) {
-                                tmpOut.write(buf, 0, n)
-                            } else if (totalRead > threshold) {
-                                // 임계값 초과 → tmpFile로 전환
-                                tmpFile = java.io.File(cacheDir, "takeout_tmp_${System.currentTimeMillis()}")
-                                tmpOut = tmpFile.outputStream().buffered()
-                                tmpOut.write(baos.toByteArray())
-                                tmpOut.write(buf, 0, n)
-                            } else {
-                                baos.write(buf, 0, n)
-                            }
-                            n = zis4.read(buf)
-                        }
-                        tmpOut?.flush(); tmpOut?.close()
-                        val fileSize = totalRead
-                        val data: ByteArray = if (tmpFile != null) {
-                            tmpFile.readBytes()
-                        } else {
-                            baos.toByteArray()
-                        }
-                        try {
-
-                            var uDone = false; var uOk = false
-                            if (fp in createdFolders) {
-                                // 폴더 이미 생성됨 - 바로 업로드
-                                api.uploadFile(data, fn, fp) { uOk = it; uDone = true }
-                            } else {
-                                api.ensureFolder(fp) { ok ->
-                                    if (ok) {
-                                        createdFolders.add(fp)
-                                        api.uploadFile(data, fn, fp) { uOk = it; uDone = true }
-                                    } else uDone = true
+                // Producer: ZIP에서 읽어서 Channel에 전달
+                val producer = launch {
+                    val zis4 = ZipArchiveInputStream(contentResolver.openInputStream(zipUri))
+                    var e4 = zis4.nextZipEntry
+                    try {
+                        while (e4 != null && isActive) {
+                            if (!e4.isDirectory && e4.name in mediaNames) {
+                                val fn = e4.name.substringAfterLast('/')
+                                val albumName = extractAlbumName(e4.name)
+                                val fp = if (albumName != null) {
+                                    "${'$'}{api.rootFolder}/Albums/${'$'}albumName"
+                                } else {
+                                    val ym = yearMonth(fn, e4.name)
+                                    "${'$'}{api.rootFolder}/${'$'}ym"
                                 }
-                            }
-                            while (!uDone && isActive) delay(100)
 
-                            if (uOk) {
-                                done++; doneBytes += fileSize; uploaded.add(e4.name); addUploadedFile(e4.name)
-                                val pct = if (total > 0) done * 100 / total else 0
-                                val sizeKB = String.format("%.1f", fileSize / 1024.0); liveLog("✅ $fn (${sizeKB}KB)")
-                                notifyProgress("업로드 $pct% - $fn", done, total)
-                            } else { done++; errors++; liveLog("❌ $fn") }
-                        } finally { tmpFile?.delete() }
+                                if (e4.name in uploaded) {
+                                    synchronized(this@launch) {
+                                        done++; skipped++
+                                    }
+                                    if (skipped % 100 == 0 || skipped == 1) {
+                                        val pct = if (total > 0) done * 100 / total else 0
+                                        notifyProgress("스킵 중 (${'$'}pct%) ${'$'}{skipped}개 완료", done, total)
+                                        progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null, doneBytes, skipped))
+                                    }
+                                    drain(zis4); e4 = zis4.nextZipEntry; continue
+                                }
 
-                        progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null, doneBytes, skipped))
-                    } else { drain(zis4) }
-                    e4 = zis4.nextZipEntry
+                                // 스트리밍 읽기
+                                val threshold = 4 * 1024 * 1024
+                                val baos = java.io.ByteArrayOutputStream(65536)
+                                var tmpFile: java.io.File? = null
+                                var tmpOut: java.io.OutputStream? = null
+                                val buf = ByteArray(32768)
+                                var totalRead = 0L
+                                var n = zis4.read(buf)
+                                while (n != -1) {
+                                    totalRead += n
+                                    if (tmpOut != null) {
+                                        tmpOut.write(buf, 0, n)
+                                    } else if (totalRead > threshold) {
+                                        tmpFile = java.io.File(cacheDir, "takeout_tmp_${'$'}{System.currentTimeMillis()}")
+                                        tmpOut = tmpFile.outputStream().buffered()
+                                        tmpOut.write(baos.toByteArray())
+                                        tmpOut.write(buf, 0, n)
+                                    } else {
+                                        baos.write(buf, 0, n)
+                                    }
+                                    n = zis4.read(buf)
+                                }
+                                tmpOut?.flush(); tmpOut?.close()
+                                val data = if (tmpFile != null) tmpFile.readBytes() else baos.toByteArray()
+
+                                channel.send(UploadItem(e4.name, fn, fp, data, totalRead, tmpFile))
+                            } else { drain(zis4) }
+                            e4 = zis4.nextZipEntry
+                        }
+                    } finally { zis4.close(); channel.close() }
                 }
-                zis4.close()
+
+                // Workers: Channel에서 받아 병렬 업로드
+                val workers = (1..3).map { workerId ->
+                    launch {
+                        for (item in channel) {
+                            try {
+                                val pathInfo = item.fp.substringAfter(api.rootFolder + "/")
+                                liveLog("[W${'$'}workerId] ${'$'}{item.fn} (${'$'}pathInfo)")
+
+                                val folderOk = if (item.fp in createdFolders) true
+                                else {
+                                    val ok = ensureFolderSuspend(api, item.fp)
+                                    if (ok) createdFolders.add(item.fp)
+                                    ok
+                                }
+
+                                val uOk = if (folderOk) uploadFileSuspend(api, item.data, item.fn, item.fp) else false
+
+                                synchronized(this@launch) {
+                                    if (uOk) {
+                                        done++; doneBytes += item.fileSize; uploaded.add(item.zipName); addUploadedFile(item.zipName)
+                                        val pct = if (total > 0) done * 100 / total else 0
+                                        val sizeKB = String.format("%.1f", item.fileSize / 1024.0)
+                                        liveLog("✅ ${'$'}{item.fn} (${'$'}{sizeKB}KB)")
+                                        notifyProgress("업로드 ${'$'}pct% - ${'$'}{item.fn}", done, total)
+                                    } else {
+                                        done++; errors++; liveLog("❌ ${'$'}{item.fn}")
+                                    }
+                                    progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null, doneBytes, skipped))
+                                }
+                            } finally { item.tmpFile?.delete() }
+                        }
+                    }
+                }
+
+                // 완료 대기
+                producer.join()
+                workers.forEach { it.join() }
 
                 flushUploadedFiles()
                 // uploaded 목록은 유지 (재실행 시 스킵용)
