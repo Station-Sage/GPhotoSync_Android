@@ -725,14 +725,22 @@ class TakeoutUploadService : Service() {
                                             drain(zis4); e4 = zis4.nextZipEntry; continue
                                         }
                                     } else {
-                                        val d = aDone.incrementAndGet()
-                                        val s = aSkipped.incrementAndGet()
-                                        if (s % 100 == 0 || s == 1) {
-                                            val pct = if (total > 0) d * 100 / total else 0
-                                            notifyProgress("스킵 중 ($pct%) ${s}개 완료", d, total)
-                                            progressCallback?.invoke(TakeoutProgress(d, total, aErrors.get(), false, null, aDoneBytes.get(), s))
+                                        // 새 업로드도 OneDrive 존재 확인
+                                        val checkPath2 = "$fp/$fn"
+                                        val exists2 = checkFileExistsSuspend(api, checkPath2)
+                                        if (exists2 == null) {
+                                            synchronized(lock) { uploaded.remove(e4.name) }
+                                            liveLog("🔄 재업로드 필요: $fn (OneDrive에서 삭제됨)")
+                                        } else {
+                                            val d = aDone.incrementAndGet()
+                                            val s = aSkipped.incrementAndGet()
+                                            if (s % 100 == 0 || s == 1) {
+                                                val pct = if (total > 0) d * 100 / total else 0
+                                                notifyProgress("스킵 중 ($pct%) ${s}개 완료", d, total)
+                                                progressCallback?.invoke(TakeoutProgress(d, total, aErrors.get(), false, null, aDoneBytes.get(), s))
+                                            }
+                                            drain(zis4); e4 = zis4.nextZipEntry; continue
                                         }
-                                        drain(zis4); e4 = zis4.nextZipEntry; continue
                                     }
                                 }
 
