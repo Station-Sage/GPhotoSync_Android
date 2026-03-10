@@ -494,6 +494,21 @@ class MainActivity : AppCompatActivity() {
             v.findViewById<android.widget.Button>(R.id.btnStopTakeout).visibility = View.GONE
             v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = true
             v.findViewById<android.widget.Button>(R.id.btnStartTakeout).text = "🚀 OneDrive에 업로드"
+            // 이어하기 버튼 표시
+            v.findViewById<android.widget.Button>(R.id.btnResumeTakeout).visibility = View.VISIBLE
+        }
+
+        v.findViewById<android.widget.Button>(R.id.btnResumeTakeout).setOnClickListener {
+            val uri = selectedZipUri
+            if (uri == null) {
+                Toast.makeText(this, "ZIP 파일을 먼저 선택하세요", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            if (!TokenManager.isMicrosoftAuthed()) {
+                Toast.makeText(this, "먼저 인증 탭에서 Microsoft 로그인하세요", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            resumeTakeoutUpload(uri)
         }
 
         v.findViewById<android.widget.Button>(R.id.btnStartDate).setOnClickListener {
@@ -556,6 +571,27 @@ class MainActivity : AppCompatActivity() {
     }
 
 
+    private fun resumeTakeoutUpload(uri: Uri) {
+        takeoutLogLines.clear()
+        val v = takeoutView ?: return
+        v.findViewById<TextView>(R.id.tvTakeoutLog).text = ""
+        v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = false
+        v.findViewById<android.widget.Button>(R.id.btnResumeTakeout).visibility = View.GONE
+        v.findViewById<android.widget.Button>(R.id.btnStopTakeout).visibility = View.VISIBLE
+        v.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar).visibility = View.VISIBLE
+        v.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar).isIndeterminate = true
+        v.findViewById<TextView>(R.id.tvTakeoutProgress).visibility = View.VISIBLE
+        v.findViewById<TextView>(R.id.tvTakeoutStatus).text = "이어하기 시작..."
+        appendTakeoutLog("이전 중단 지점부터 이어서 업로드합니다...")
+
+        val intent = Intent(this, TakeoutUploadService::class.java)
+        intent.action = TakeoutUploadService.ACTION_RESUME
+        intent.putExtra(TakeoutUploadService.EXTRA_ZIP_URI, uri.toString())
+        if (filterStartDate != null) intent.putExtra("start_date", filterStartDate)
+        if (filterEndDate != null) intent.putExtra("end_date", filterEndDate)
+        startForegroundService(intent)
+    }
+
     private fun startTakeoutUpload(uri: Uri) {
         takeoutLogLines.clear()
         val v = takeoutView ?: return
@@ -594,6 +630,11 @@ class MainActivity : AppCompatActivity() {
             v.findViewById<android.widget.Button>(R.id.btnStopTakeout).visibility = View.GONE
             v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = true
             v.findViewById<android.widget.Button>(R.id.btnStartTakeout).text = "🚀 OneDrive에 업로드"
+            // 중단된 경우 이어하기 버튼 표시
+            val hasResumable = getSharedPreferences("takeout_progress", MODE_PRIVATE)
+                .getStringSet("uploaded_files", emptySet())?.isNotEmpty() == true
+            v.findViewById<android.widget.Button>(R.id.btnResumeTakeout).visibility =
+                if (hasResumable && progress.errorMessage?.contains("중단") == true) View.VISIBLE else View.GONE
             val success = progress.done - progress.errors - progress.skipped
             if (progress.errorMessage != null) {
                 tvStatus.text = "오류: ${progress.errorMessage}"

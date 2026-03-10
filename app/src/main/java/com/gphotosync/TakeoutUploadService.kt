@@ -16,6 +16,7 @@ class TakeoutUploadService : Service() {
         const val ACTION_START = "com.gphotosync.TAKEOUT_START"
         const val ACTION_STOP = "com.gphotosync.TAKEOUT_STOP"
         const val ACTION_ANALYZE = "com.gphotosync.TAKEOUT_ANALYZE"
+        const val ACTION_RESUME = "com.gphotosync.TAKEOUT_RESUME"
         const val EXTRA_ZIP_URI = "zip_uri"
         const val CHANNEL_ID = "takeout_channel"
         const val NOTIF_ID = 2001
@@ -48,6 +49,13 @@ class TakeoutUploadService : Service() {
                 job?.cancel()
                 stopSelf()
             }
+            ACTION_RESUME -> {
+                val uriStr = intent.getStringExtra(EXTRA_ZIP_URI) ?: return START_NOT_STICKY
+                val startDate = intent.getStringExtra("start_date")
+                val endDate = intent.getStringExtra("end_date")
+                startForeground(NOTIF_ID, buildNotification("Takeout 업로드 이어하기...", 0, 0))
+                startUpload(Uri.parse(uriStr), startDate, endDate, resume = true)
+            }
             ACTION_ANALYZE -> {
                 val uriStr = intent.getStringExtra(EXTRA_ZIP_URI) ?: return START_NOT_STICKY
                 val startDate = intent.getStringExtra("start_date")
@@ -57,6 +65,35 @@ class TakeoutUploadService : Service() {
             }
         }
         return START_NOT_STICKY
+    }
+
+    // === 업로드 진행 상태 저장 (중단 후 이어하기용) ===
+    private fun getUploadedFiles(): MutableSet<String> {
+        val prefs = getSharedPreferences("takeout_progress", MODE_PRIVATE)
+        return prefs.getStringSet("uploaded_files", emptySet())?.toMutableSet() ?: mutableSetOf()
+    }
+
+    private fun saveUploadedFile(filename: String) {
+        val prefs = getSharedPreferences("takeout_progress", MODE_PRIVATE)
+        val set = prefs.getStringSet("uploaded_files", emptySet())?.toMutableSet() ?: mutableSetOf()
+        set.add(filename)
+        prefs.edit().putStringSet("uploaded_files", set).apply()
+    }
+
+    private fun clearUploadedFiles() {
+        getSharedPreferences("takeout_progress", MODE_PRIVATE).edit().clear().apply()
+    }
+
+    private fun saveUploadState(zipUri: String, done: Int, total: Int, errors: Int, skipped: Int, doneBytes: Long) {
+        val prefs = getSharedPreferences("takeout_progress", MODE_PRIVATE)
+        prefs.edit()
+            .putString("last_zip_uri", zipUri)
+            .putInt("last_done", done)
+            .putInt("last_total", total)
+            .putInt("last_errors", errors)
+            .putInt("last_skipped", skipped)
+            .putLong("last_done_bytes", doneBytes)
+            .apply()
     }
 
     private fun liveLog(msg: String) {
@@ -224,7 +261,7 @@ class TakeoutUploadService : Service() {
         }
     }
 
-    private fun startUpload(zipUri: Uri, startDate: String? = null, endDate: String? = null) {
+    private fun startUpload(zipUri: Uri, startDate: String? = null, endDate: String? = null, resume: Boolean = false) {
         val oneDriveApi = OneDriveApi(this)
 
         job = scope.launch {
@@ -305,6 +342,13 @@ class TakeoutUploadService : Service() {
                 progressCallback?.invoke(TakeoutProgress(0, total, 0, false, null))
 
                 // 2단계: ZIP 다시 열어서 파일별 업로드
+                val uploadedFiles = if (resume) getUploadedFiles() else {
+                    clearUploadedFiles()
+                    mutableSetOf()
+                }
+                if (resume && uploadedFiles.isNotEmpty()) {
+                    liveLog("이어하기: 이전에 완료된 ${uploadedFiles.size}개 파일 스킵")
+                }
                 var done = 0
                 var errors = 0
                 var skipped = 0
@@ -320,6 +364,19 @@ class TakeoutUploadService : Service() {
                         val filename = entry.name.substringAfterLast('/')
                         val yearMonth = extractYearMonth(filename, entry.name)
                         val folderPath = "${oneDriveApi.rootFolder}/$yearMonth"
+
+                        // 이어하기: 이미 업로드된 파일 스킵
+                        if (entry.name in uploadedFiles) {
+                            done++
+                            skipped++
+                            val pct = if (total > 0) done * 100 / total else 0
+                            notifyProgress("이어하기 ($pct%) - 스킵: $filename", done, total)
+                            progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null, doneBytes, skipped))
+                            // ZIP 스트림에서 데이터를 읽어야 다음 엔트리로 넘어감
+                            zis.readBytes()
+                            entry = zis.nextZipEntry
+                            continue
+                        }
 
                         liveLog("처리 중: $filename ($yearMonth)")
 
@@ -338,6 +395,8 @@ class TakeoutUploadService : Service() {
                         if (existingSize != null && existingSize == fileData.size.toLong()) {
                             done++
                             skipped++
+                            uploadedFiles.add(entry.name)
+                            saveUploadedFile(entry.name)
                             liveLog("⏭ 중복 스킵: $filename (${String.format("%.1f", fileData.size / 1024.0)}KB)")
                             val pct = if (total > 0) done * 100 / total else 0
                             notifyProgress("업로드 중 ($pct%) - 스킵: $filename", done, total)
@@ -366,6 +425,9 @@ class TakeoutUploadService : Service() {
                         if (uploadOk) {
                             done++
                             doneBytes += fileData.size
+                            uploadedFiles.add(entry.name)
+                            saveUploadedFile(entry.name)
+                            saveUploadState(zipUri.toString(), done, total, errors, skipped, doneBytes)
                             val pct = if (total > 0) done * 100 / total else 0
                             liveLog("✅ 완료: $filename (${String.format("%.1f", fileData.size / 1024.0)}KB)")
                             notifyProgress("업로드 중 ($pct%) - $filename", done, total)
@@ -382,6 +444,7 @@ class TakeoutUploadService : Service() {
                 }
                 zis.close()
 
+                clearUploadedFiles()
                 val success = done - errors
                 val msg = "Takeout 완료! 성공:${success} 스킵:${skipped} 실패:${errors} (전체:${total})"
                 liveLog(msg)
@@ -393,8 +456,9 @@ class TakeoutUploadService : Service() {
                     stopSelf()
                 }
             } catch (e: CancellationException) {
-                liveLog("Takeout 업로드 중단됨")
-                notifyProgress("중단됨", 0, 0)
+                liveLog("Takeout 업로드 중단됨 (이어하기 가능)")
+                notifyProgress("중단됨 - 이어하기 가능", 0, 0)
+                progressCallback?.invoke(TakeoutProgress(0, 0, 0, true, "중단됨 - 이어하기 가능"))
                 stopForeground(STOP_FOREGROUND_DETACH)
                 stopSelf()
             } catch (e: Exception) {

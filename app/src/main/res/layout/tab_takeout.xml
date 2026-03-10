@@ -218,6 +218,16 @@
                     android:backgroundTint="#F44336"
                     android:layout_marginTop="8dp"
                     android:visibility="gone" />
+
+                <Button
+                    android:id="@+id/btnResumeTakeout"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:text="▶️ 이어하기 (중단된 지점부터)"
+                    android:textSize="14sp"
+                    android:backgroundTint="#FF6F00"
+                    android:layout_marginTop="8dp"
+                    android:visibility="gone" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
