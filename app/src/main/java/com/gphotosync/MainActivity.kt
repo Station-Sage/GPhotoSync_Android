@@ -602,11 +602,11 @@ class MainActivity : AppCompatActivity() {
             v.findViewById<android.widget.Button>(R.id.btnStopTakeout).visibility = View.GONE
             v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = true
             v.findViewById<android.widget.Button>(R.id.btnStartTakeout).text = "🚀 OneDrive에 업로드"
-            val success = progress.done - progress.errors
+            val success = progress.done - progress.errors - progress.skipped
             if (progress.errorMessage != null) {
                 tvStatus.text = "오류: ${progress.errorMessage}"
             } else {
-                tvStatus.text = "완료! 성공:${success} 실패:${progress.errors}"
+                tvStatus.text = "완료! 성공:${success} 스킵:${progress.skipped} 실패:${progress.errors}"
             }
         } else {
             tvStatus.text = "업로드 중..."

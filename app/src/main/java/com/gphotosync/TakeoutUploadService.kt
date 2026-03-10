@@ -144,6 +144,7 @@ class TakeoutUploadService : Service() {
                 // 2단계: ZIP 다시 열어서 파일별 업로드
                 var done = 0
                 var errors = 0
+                var skipped = 0
                 var doneBytes = 0L
 
                 val mediaNames = mediaEntries.map { it.first }.toSet()
@@ -161,6 +162,26 @@ class TakeoutUploadService : Service() {
 
                         // ZIP에서 파일 데이터 읽기
                         val fileData = zis.readBytes()
+
+                        // 중복 체크: OneDrive에 같은 파일명+같은 크기 존재 시 스킵
+                        var existingSize: Long? = null
+                        var checkDone = false
+                        oneDriveApi.checkFileExists("$folderPath/$filename") { size ->
+                            existingSize = size
+                            checkDone = true
+                        }
+                        while (!checkDone && isActive) delay(100)
+
+                        if (existingSize != null && existingSize == fileData.size.toLong()) {
+                            done++
+                            skipped++
+                            liveLog("⏭ 중복 스킵: $filename (${String.format("%.1f", fileData.size / 1024.0)}KB)")
+                            val pct = if (total > 0) done * 100 / total else 0
+                            notifyProgress("업로드 중 ($pct%) - 스킵: $filename", done, total)
+                            progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null, doneBytes, skipped))
+                            entry = zis.nextZipEntry
+                            continue
+                        }
 
                         // 폴더 생성 + 업로드
                         var uploadDone = false
@@ -191,7 +212,7 @@ class TakeoutUploadService : Service() {
                             liveLog("❌ 실패: $filename")
                         }
 
-                        progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null, doneBytes))
+                        progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null, doneBytes, skipped))
                         delay(300)
                     }
                     entry = zis.nextZipEntry
@@ -199,10 +220,10 @@ class TakeoutUploadService : Service() {
                 zis.close()
 
                 val success = done - errors
-                val msg = "Takeout 완료! 성공:${success} 실패:${errors} (전체:${total})"
+                val msg = "Takeout 완료! 성공:${success} 스킵:${skipped} 실패:${errors} (전체:${total})"
                 liveLog(msg)
                 notifyProgress(msg, done, total)
-                progressCallback?.invoke(TakeoutProgress(done, total, errors, true, null, doneBytes))
+                progressCallback?.invoke(TakeoutProgress(done, total, errors, true, null, doneBytes, skipped))
 
                 withContext(Dispatchers.Main) {
                     stopForeground(STOP_FOREGROUND_DETACH)
@@ -271,5 +292,6 @@ data class TakeoutProgress(
     val errors: Int,
     val finished: Boolean,
     val errorMessage: String?,
-    val doneBytes: Long = 0L
+    val doneBytes: Long = 0L,
+    val skipped: Int = 0
 )

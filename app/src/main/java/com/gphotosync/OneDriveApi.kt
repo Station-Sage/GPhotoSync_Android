@@ -160,5 +160,37 @@ class OneDriveApi(private val context: Context) {
         uploadNext()
     }
 
+    /**
+     * OneDrive에 해당 경로의 파일이 존재하는지 확인하고, 존재하면 파일 크기를 반환
+     */
+    fun checkFileExists(filePath: String, callback: (Long?) -> Unit) {
+        TokenManager.getValidMicrosoftToken(client) { token ->
+            if (token == null) { callback(null); return@getValidMicrosoftToken }
+
+            val encodedPath = filePath.trim('/').split("/").joinToString("/") {
+                java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20")
+            }
+
+            val req = Request.Builder()
+                .url("$GRAPH/me/drive/root:/$encodedPath")
+                .header("Authorization", "Bearer $token")
+                .get()
+                .build()
+
+            client.newCall(req).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) { callback(null) }
+                override fun onResponse(call: Call, response: Response) {
+                    if (response.code == 200) {
+                        val json = JSONObject(response.body?.string() ?: "{}")
+                        val size = json.optLong("size", -1)
+                        callback(if (size >= 0) size else null)
+                    } else {
+                        callback(null)
+                    }
+                }
+            })
+        }
+    }
+
     val rootFolder: String get() = ROOT_FOLDER
 }
