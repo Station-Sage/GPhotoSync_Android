@@ -247,7 +247,7 @@ class TakeoutUploadService : Service() {
                             notifyProgress("분석 $pct% ($rdMB/$zipMB MB) | 파일$sc 미디어$mediaCount",
                                 if (zipBytes > 0) (cs.bytesRead / 1048576).toInt() else 0,
                                 if (zipBytes > 0) (zipBytes / 1048576).toInt() else 0)
-                            if (sc.rem(500) == 0) liveLog("분석 $pct%: $sc개 스캔, 미디어 $mediaCount, JSON $jsonCount")
+                            if (sc.rem(500) == 0) liveLog("분석 $pct%: ${sc}개 스캔, 미디어 $mediaCount, JSON $jsonCount")
                             if (zipBytes > 0) progressCallback?.invoke(TakeoutProgress(pct, 100, 0, false, null, cs.bytesRead, 0))
                         }
                     }
@@ -257,14 +257,14 @@ class TakeoutUploadService : Service() {
 
                 if (!isActive) {
                     saveAnalyzeState(sc, mediaCount, totalSize, jsonCount); saveJsonDateMap()
-                    liveLog("분석 중단 ($sc개 스캔, 이어하기 가능)")
+                    liveLog("분석 중단 (${sc}개 스캔, 이어하기 가능)")
                     android.os.Handler(android.os.Looper.getMainLooper()).post { analyzeCallback?.invoke(-2, totalSize, sc) }
                     stopForeground(STOP_FOREGROUND_DETACH); stopSelf(); return@launch
                 }
 
                 saveJsonDateMap(); clearAnalyzeState()
-                liveLog("분석 완료: 전체 $sc개, 미디어 $mediaCount개, JSON $jsonCount개")
-                notifyProgress("분석 완료: 미디어 $mediaCount개", 0, 0)
+                liveLog("분석 완료: 전체 ${sc}개, 미디어 ${mediaCount}개, JSON ${jsonCount}개")
+                notifyProgress("분석 완료: 미디어 ${mediaCount}개", 0, 0)
                 android.os.Handler(android.os.Looper.getMainLooper()).post { analyzeCallback?.invoke(mediaCount, totalSize, sc) }
                 stopForeground(STOP_FOREGROUND_DETACH); stopSelf()
             } catch (e: CancellationException) {
@@ -300,7 +300,7 @@ class TakeoutUploadService : Service() {
                         je = zis2.nextZipEntry
                     }
                     zis2.close()
-                    liveLog("JSON $jc개 수집 완료")
+                    liveLog("JSON ${jc}개 수집 완료")
                 }
 
                 // 미디어 파일 목록 수집
@@ -324,8 +324,8 @@ class TakeoutUploadService : Service() {
                     stopSelf(); return@launch
                 }
 
-                liveLog("미디어 $total개. 업로드 시작...")
-                notifyProgress("업로드 시작 ($total개)", 0, total)
+                liveLog("미디어 ${total}개. 업로드 시작...")
+                notifyProgress("업로드 시작 (${total}개)", 0, total)
                 progressCallback?.invoke(TakeoutProgress(0, total, 0, false, null))
 
                 val uploaded = if (resume) getUploadedFiles() else { clearUploadedFiles(); mutableSetOf() }
