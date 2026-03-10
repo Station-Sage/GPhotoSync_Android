@@ -192,6 +192,39 @@ class TakeoutUploadService : Service() {
         return null
     }
 
+
+    // Takeout ZIP 경로에서 앨범명 추출
+    // "Takeout/Google Photos/Photos from 2024/file.jpg" → null (날짜 폴더)
+    // "Takeout/Google Photos/여행 2023/file.jpg" → "여행 2023" (앨범)
+    private val datefolderPattern = Regex("""Photos from \d{4}""")
+    private val dateFolderPatterns = listOf(
+        Regex("""Photos from \d{4}"""),
+        Regex("""^\d{4}년\s*\d{1,2}월\s*\d{1,2}일$"""),
+        Regex("""^\d{4}-\d{2}-\d{2}$""")
+    )
+
+    private fun extractAlbumName(zipPath: String): String? {
+        // 경로: Takeout/Google Photos/폴더명/파일명 또는 Takeout/Google 포토/폴더명/파일명
+        val parts = zipPath.split("/")
+        if (parts.size < 3) return null
+
+        // "Google Photos" 또는 "Google 포토" 다음 폴더가 앨범 후보
+        val gpIdx = parts.indexOfFirst { it == "Google Photos" || it == "Google 포토" || it.startsWith("Google") }
+        if (gpIdx < 0 || gpIdx + 1 >= parts.size - 1) return null
+
+        val folderName = parts[gpIdx + 1]
+
+        // 날짜 폴더 패턴이면 앨범 아님
+        for (p in dateFolderPatterns) {
+            if (p.matches(folderName)) return null
+        }
+
+        // 빈 문자열이나 너무 짧으면 무시
+        if (folderName.isBlank() || folderName.length < 2) return null
+
+        return folderName
+    }
+
     private fun yearMonth(filename: String, path: String): String {
         jsonDateMap[filename]?.let { return it }
         val ym = Regex("""((?:19|20)\d{2})[-_]?(\d{2})[-_]?\d{2}""")
@@ -388,8 +421,13 @@ class TakeoutUploadService : Service() {
                 while (e4 != null && isActive) {
                     if (!e4.isDirectory && e4.name in mediaNames) {
                         val fn = e4.name.substringAfterLast('/')
-                        val ym = yearMonth(fn, e4.name)
-                        val fp = "${api.rootFolder}/$ym"
+                        val albumName = extractAlbumName(e4.name)
+                        val fp = if (albumName != null) {
+                            "${api.rootFolder}/Albums/$albumName"
+                        } else {
+                            val ym = yearMonth(fn, e4.name)
+                            "${api.rootFolder}/$ym"
+                        }
 
                         if (e4.name in uploaded) {
                             done++; skipped++
@@ -399,7 +437,8 @@ class TakeoutUploadService : Service() {
                             drain(zis4); e4 = zis4.nextZipEntry; continue
                         }
 
-                        liveLog("[$done/$total] $fn ($ym)")
+                        val pathInfo = if (albumName != null) "앨범:$albumName" else yearMonth(fn, e4.name)
+                        liveLog("[$done/$total] $fn ($pathInfo)")
 
                         // 임시 파일에 저장 (OOM 방지)
                         val tmpFile = java.io.File(cacheDir, "takeout_tmp_${System.currentTimeMillis()}")
