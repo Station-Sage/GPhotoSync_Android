@@ -214,6 +214,7 @@ class TakeoutUploadService : Service() {
         return logWriter
     }
 
+    @Synchronized
     private fun liveLog(msg: String) {
         val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
         try { getLogWriter()?.apply { write("$ts $msg"); newLine(); flush() } } catch (_: Exception) {}
@@ -411,7 +412,7 @@ class TakeoutUploadService : Service() {
                 }
 
                 // 업로드 완료된 파일 중 앨범이 있는 것만 처리
-                val uploaded = getUploadedFiles()
+                val uploaded = Collections.synchronizedSet(getUploadedFiles())
                 val albumFiles = albumMap.filter { it.key in uploaded }
 
                 if (albumFiles.isEmpty()) {
@@ -548,11 +549,11 @@ class TakeoutUploadService : Service() {
 
                 val uploaded: MutableSet<String>
                 if (resume) {
-                    uploaded = getUploadedFiles()
+                    uploaded = Collections.synchronizedSet(getUploadedFiles())
                     if (uploaded.isNotEmpty()) liveLog("이어하기: ${uploaded.size}개 스킵")
                 } else {
                     // 새 업로드도 기존 완료 목록은 유지 (스킵 가속)
-                    uploaded = getUploadedFiles()
+                    uploaded = Collections.synchronizedSet(getUploadedFiles())
                     if (uploaded.isNotEmpty()) liveLog("기존 완료 ${uploaded.size}개는 스킵합니다")
                 }
 
@@ -574,10 +575,10 @@ class TakeoutUploadService : Service() {
                                 val fn = e4.name.substringAfterLast('/')
                                 val albumName = extractAlbumName(e4.name)
                                 val fp = if (albumName != null) {
-                                    "${'$'}{api.rootFolder}/Albums/${'$'}albumName"
+                                    "${api.rootFolder}/Albums/$albumName"
                                 } else {
                                     val ym = yearMonth(fn, e4.name)
-                                    "${'$'}{api.rootFolder}/${'$'}ym"
+                                    "${api.rootFolder}/$ym"
                                 }
 
                                 if (e4.name in uploaded) {
@@ -585,7 +586,7 @@ class TakeoutUploadService : Service() {
                                     val s = aSkipped.incrementAndGet()
                                     if (s % 100 == 0 || s == 1) {
                                         val pct = if (total > 0) d * 100 / total else 0
-                                        notifyProgress("스킵 중 (${'$'}pct%) ${'$'}{s}개 완료", d, total)
+                                        notifyProgress("스킵 중 ($pct%) ${s}개 완료", d, total)
                                         progressCallback?.invoke(TakeoutProgress(d, total, aErrors.get(), false, null, aDoneBytes.get(), s))
                                     }
                                     drain(zis4); e4 = zis4.nextZipEntry; continue
@@ -604,7 +605,7 @@ class TakeoutUploadService : Service() {
                                     if (tmpOut != null) {
                                         tmpOut.write(buf, 0, n)
                                     } else if (totalRead > threshold) {
-                                        tmpFile = java.io.File(cacheDir, "takeout_tmp_${'$'}{System.currentTimeMillis()}")
+                                        tmpFile = java.io.File(cacheDir, "takeout_tmp_${System.currentTimeMillis()}")
                                         tmpOut = tmpFile.outputStream().buffered()
                                         tmpOut.write(baos.toByteArray())
                                         tmpOut.write(buf, 0, n)
@@ -629,7 +630,7 @@ class TakeoutUploadService : Service() {
                         for (item in channel) {
                             try {
                                 val pathInfo = item.fp.substringAfter(api.rootFolder + "/")
-                                liveLog("[W${'$'}workerId] ${'$'}{item.fn} (${'$'}pathInfo)")
+                                liveLog("[W$workerId] ${item.fn} ($pathInfo)")
 
                                 val alreadyCached = synchronized(lock) { item.fp in createdFolders }
                                 val folderOk = if (alreadyCached) true
@@ -647,11 +648,11 @@ class TakeoutUploadService : Service() {
                                     synchronized(lock) { uploaded.add(item.zipName); addUploadedFile(item.zipName) }
                                     val pct = if (total > 0) d * 100 / total else 0
                                     val sizeKB = String.format("%.1f", item.fileSize / 1024.0)
-                                    liveLog("✅ ${'$'}{item.fn} (${'$'}{sizeKB}KB)")
-                                    notifyProgress("업로드 ${'$'}pct% - ${'$'}{item.fn}", d, total)
+                                    liveLog("✅ ${item.fn} (${sizeKB}KB)")
+                                    notifyProgress("업로드 $pct% - ${item.fn}", d, total)
                                 } else {
                                     aDone.incrementAndGet(); aErrors.incrementAndGet()
-                                    liveLog("❌ ${'$'}{item.fn}")
+                                    liveLog("❌ ${item.fn}")
                                 }
                                 progressCallback?.invoke(TakeoutProgress(aDone.get(), total, aErrors.get(), false, null, aDoneBytes.get(), aSkipped.get()))
                             } finally { item.tmpFile?.delete() }
