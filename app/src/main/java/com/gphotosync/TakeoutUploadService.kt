@@ -116,7 +116,6 @@ class TakeoutUploadService : Service() {
                         entry = zis.nextZipEntry
                     }
                     zis.close()
-            liveLog("스캔 완료: 미디어 파일 ${entries.size}개 발견")
                 } catch (e: Exception) {
                     liveLog("ZIP 분석 실패: ${e.message}")
                     progressCallback?.invoke(TakeoutProgress(0, 0, 0, true, "ZIP 분석 실패: ${e.message}"))
@@ -175,9 +174,7 @@ class TakeoutUploadService : Service() {
 
                         if (existingSize != null && existingSize == fileData.size.toLong()) {
                             done++
-                        liveLog("✅ 업로드 완료: ${fileName}")
                             skipped++
-                        liveLog("⏭ 스킵 (이미 존재): ${fileName}")
                             liveLog("⏭ 중복 스킵: $filename (${String.format("%.1f", fileData.size / 1024.0)}KB)")
                             val pct = if (total > 0) done * 100 / total else 0
                             notifyProgress("업로드 중 ($pct%) - 스킵: $filename", done, total)
@@ -212,7 +209,6 @@ class TakeoutUploadService : Service() {
                         } else {
                             done++
                             errors++
-                        liveLog("❌ 업로드 실패: ${fileName} - ${e.message}")
                             liveLog("❌ 실패: $filename")
                         }
 
