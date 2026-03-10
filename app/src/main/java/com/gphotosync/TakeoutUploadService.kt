@@ -132,7 +132,7 @@ class TakeoutUploadService : Service() {
     }
 
     // === 스트림 드레인: 메모리에 올리지 않고 스트림 소비 ===
-    private val drainBuf = ByteArray(65536)
+    private val drainBuf = ByteArray(262144) // 256KB
     private fun drain(zis: ZipArchiveInputStream) {
         try { while (zis.read(drainBuf) != -1) { } } catch (_: Exception) {}
     }
@@ -140,8 +140,8 @@ class TakeoutUploadService : Service() {
     // === JSON을 스트리밍으로 읽기 (최대 64KB만, 그 이상은 스킵) ===
     private fun readJsonSafe(zis: ZipArchiveInputStream): String? {
         val maxSize = 65536
-        val baos = ByteArrayOutputStream(4096)
-        val buf = ByteArray(4096)
+        val baos = ByteArrayOutputStream(8192)
+        val buf = ByteArray(32768)
         var total = 0
         var n = zis.read(buf)
         while (n != -1) {
@@ -371,7 +371,7 @@ class TakeoutUploadService : Service() {
                 try { contentResolver.openFileDescriptor(zipUri, "r")?.use { zipBytes = it.statSize } } catch (_: Exception) {}
                 val zipMB = if (zipBytes > 0) String.format("%.0f", zipBytes / 1048576.0) else "?"
 
-                val cs = CountingInputStream(contentResolver.openInputStream(zipUri)!!)
+                val cs = CountingInputStream(java.io.BufferedInputStream(contentResolver.openInputStream(zipUri)!!, 524288)) // 512KB 버퍼
                 val zis = ZipArchiveInputStream(cs)
                 val mediaNames = mutableSetOf<String>()
                 val albumMap = mutableMapOf<String, String>()
@@ -406,15 +406,15 @@ class TakeoutUploadService : Service() {
                             drain(zis)
                         }
 
-                        if (sc.rem(50) == 0) {
+                        if (sc.rem(500) == 0) {
                             saveAnalyzeState(sc, mediaCount, totalSize, jsonCount)
-                            if (sc.rem(500) == 0) saveJsonDateMap()
+                            if (sc.rem(2000) == 0) saveJsonDateMap()
                             val pct = if (zipBytes > 0) (cs.bytesRead * 100 / zipBytes).toInt() else 0
                             val rdMB = String.format("%.0f", cs.bytesRead / 1048576.0)
                             notifyProgress("분석 $pct% ($rdMB/$zipMB MB) | 파일$sc 미디어$mediaCount",
                                 if (zipBytes > 0) (cs.bytesRead / 1048576).toInt() else 0,
                                 if (zipBytes > 0) (zipBytes / 1048576).toInt() else 0)
-                            if (sc.rem(500) == 0) liveLog("분석 $pct%: ${sc}개 스캔, 미디어 ${mediaCount}, JSON $jsonCount")
+                            if (sc.rem(2000) == 0) liveLog("분석 $pct%: ${sc}개 스캔, 미디어 ${mediaCount}, JSON $jsonCount")
                             if (zipBytes > 0) progressCallback?.invoke(TakeoutProgress(pct, 100, 0, false, null, cs.bytesRead, 0))
                         }
                     }
@@ -707,7 +707,7 @@ class TakeoutUploadService : Service() {
 
                 // Producer: ZIP에서 읽어서 Channel에 전달
                 val producer = launch {
-                    val zis4 = ZipArchiveInputStream(contentResolver.openInputStream(zipUri))
+                    val zis4 = ZipArchiveInputStream(java.io.BufferedInputStream(contentResolver.openInputStream(zipUri), 524288))
                     var e4 = zis4.nextZipEntry
                     try {
                         while (e4 != null && isActive) {
