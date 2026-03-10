@@ -34,6 +34,14 @@ class SyncForegroundService : Service() {
         } catch (_: Exception) {}
     }
 
+    private fun liveLog(msg: String) {
+        val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+        logToFile(msg)
+        android.os.Handler(android.os.Looper.getMainLooper()).post {
+            logCallback?.invoke("[$ts] $msg")
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
