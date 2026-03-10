@@ -544,6 +544,25 @@ class MainActivity : AppCompatActivity() {
             v.findViewById<TextView>(R.id.tvTakeoutStatus).text = "백그라운드에서 ZIP 분석 재개 중..."
             appendTakeoutLog("분석 이어하기 시작...")
 
+            // 분석용 콜백 재설정
+            TakeoutUploadService.progressCallback = { progress ->
+                runOnUiThread {
+                    val vv = takeoutView ?: return@runOnUiThread
+                    if (progress.total > 0 && !progress.finished) {
+                        val pb = vv.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar)
+                        pb.isIndeterminate = false
+                        pb.max = progress.total
+                        pb.progress = progress.done
+                        val pct = if (progress.total > 0) progress.done * 100 / progress.total else 0
+                        val readMB = String.format("%.0f", progress.doneBytes / 1024.0 / 1024.0)
+                        vv.findViewById<android.widget.TextView>(R.id.tvTakeoutProgress).text = "분석 중: $pct% (${readMB}MB)"
+                    }
+                }
+            }
+            TakeoutUploadService.logCallback = { line ->
+                runOnUiThread { appendTakeoutLog(line) }
+            }
+
             val intent = Intent(this, TakeoutUploadService::class.java)
             intent.action = TakeoutUploadService.ACTION_ANALYZE_RESUME
             intent.putExtra(TakeoutUploadService.EXTRA_ZIP_URI, uri.toString())
@@ -628,6 +647,13 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun resumeTakeoutUpload(uri: Uri) {
+        // 업로드용 콜백 재설정
+        TakeoutUploadService.progressCallback = { progress ->
+            runOnUiThread { updateTakeoutProgress(progress) }
+        }
+        TakeoutUploadService.logCallback = { line ->
+            runOnUiThread { appendTakeoutLog(line) }
+        }
         takeoutLogLines.clear()
         val v = takeoutView ?: return
         v.findViewById<TextView>(R.id.tvTakeoutLog).text = ""
@@ -649,6 +675,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun startTakeoutUpload(uri: Uri) {
+        // 업로드용 콜백 재설정
+        TakeoutUploadService.progressCallback = { progress ->
+            runOnUiThread { updateTakeoutProgress(progress) }
+        }
+        TakeoutUploadService.logCallback = { line ->
+            runOnUiThread { appendTakeoutLog(line) }
+        }
         takeoutLogLines.clear()
         val v = takeoutView ?: return
         v.findViewById<TextView>(R.id.tvTakeoutLog).text = ""
