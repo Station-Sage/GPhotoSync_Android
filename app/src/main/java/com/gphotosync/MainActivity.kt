@@ -155,7 +155,7 @@ class MainActivity : AppCompatActivity() {
                     0 -> { contentFrame.addView(syncView); loadHistorySummary() }
                     1 -> { contentFrame.addView(authView); updateAuthUI() }
                     2 -> contentFrame.addView(infoView)
-                    3 -> { contentFrame.addView(takeoutView); restoreTakeoutState() }
+                    3 -> { contentFrame.addView(takeoutView); setupTakeoutCallbacks(); restoreTakeoutState() }
                 }
             }
             override fun onTabUnselected(tab: TabLayout.Tab) {}
@@ -614,7 +614,7 @@ class MainActivity : AppCompatActivity() {
             v.findViewById<TextView>(R.id.tvTakeoutStatus).text = lastTakeoutStatusText
             // 이어하기 버튼 상태 복원
             val hasResumable = v.context.getSharedPreferences("takeout_progress", 0)
-                .getStringSet("uploaded_files", emptySet())?.isNotEmpty() == true
+                .getStringSet("uf", emptySet())?.isNotEmpty() == true
             if (hasResumable) {
                 v.findViewById<android.widget.Button>(R.id.btnResumeTakeout).visibility = View.VISIBLE
             }
@@ -739,6 +739,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun onZipSelected(uri: Uri) {
         selectedZipUri = uri
+        getSharedPreferences("takeout_session", MODE_PRIVATE).edit().putString("zip_uri", uri.toString()).apply()
+        getSharedPreferences("takeout_session", MODE_PRIVATE).edit().putString("zip_uri", uri.toString()).apply()
+        // ZIP URI 영속 저장
+        getSharedPreferences("takeout_session", MODE_PRIVATE).edit()
+            .putString("zip_uri", uri.toString()).apply()
         val v = takeoutView ?: return
 
         appendTakeoutLog("ZIP 파일 선택됨, 분석 시작...")
@@ -870,7 +875,7 @@ class MainActivity : AppCompatActivity() {
             v.findViewById<android.widget.Button>(R.id.btnStartTakeout).text = "🚀 OneDrive에 업로드"
             // 중단된 경우 이어하기 버튼 표시
             val hasResumable = getSharedPreferences("takeout_progress", MODE_PRIVATE)
-                .getStringSet("uploaded_files", emptySet())?.isNotEmpty() == true
+                .getStringSet("uf", emptySet())?.isNotEmpty() == true
             v.findViewById<android.widget.Button>(R.id.btnResumeTakeout).visibility =
                 if (hasResumable && progress.errorMessage?.contains("중단") == true) View.VISIBLE else View.GONE
             val success = progress.done - progress.errors - progress.skipped
@@ -1174,7 +1179,12 @@ class MainActivity : AppCompatActivity() {
             intent.removeExtra("OPEN_TAB")
             val tabLayout = findViewById<TabLayout>(R.id.tabLayout)
             if (tabIndex < tabLayout.tabCount) {
-                tabLayout.getTabAt(tabIndex)?.select()
+                if (tabLayout.selectedTabPosition == tabIndex && tabIndex == 3) {
+                    setupTakeoutCallbacks()
+                    restoreTakeoutState()
+                } else {
+                    tabLayout.getTabAt(tabIndex)?.select()
+                }
             }
         }
     }
