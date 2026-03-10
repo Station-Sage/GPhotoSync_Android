@@ -319,8 +319,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshDetailLists() {
         val v = syncView ?: return
-        val successRecords = progressDb.getSuccessRecords()
-        val failedRecords = progressDb.getFailedRecords()
+        val sid = selectedSessionId
+        val successRecords = if (sid != null) progressDb.getSuccessRecordsBySession(sid) else progressDb.getSuccessRecords()
+        val failedRecords = if (sid != null) progressDb.getFailedRecordsBySession(sid) else progressDb.getFailedRecords()
         val dateFormat = SimpleDateFormat("MM/dd HH:mm", Locale.getDefault())
 
         v.findViewById<TextView>(R.id.tvSuccessCount).text = "완료: ${successRecords.size}건"
@@ -353,13 +354,15 @@ class MainActivity : AppCompatActivity() {
         val now = fmt.format(Date())
         val success = progress.done - progress.errors - progress.skipped
         val totalMB = String.format("%.1f", progress.totalBytes / 1024.0 / 1024.0)
-        val entry = "$now | 성공:$success 스킵:${progress.skipped} 실패:${progress.errors} (전체:${progress.total}, ${totalMB}MB)"
+        val sessionId = if (progress.sessionId.isNotEmpty()) progress.sessionId else now
+        val entry = "$sessionId | 성공:$success 스킵:${progress.skipped} 실패:${progress.errors} (전체:${progress.total}, ${totalMB}MB)"
         val history = prefs.getStringSet("entries", mutableSetOf())?.toMutableSet() ?: mutableSetOf()
         history.add(entry)
         prefs.edit().putStringSet("entries", history).putString("latest", entry).apply()
     }
 
     private var historyEntries = listOf<String>()
+    private var selectedSessionId: String? = null
 
     private fun loadHistorySummary() {
         val v = syncView ?: return
@@ -376,6 +379,8 @@ class MainActivity : AppCompatActivity() {
             lv.choiceMode = ListView.CHOICE_MODE_SINGLE
             lv.setOnItemClickListener { _, _, position, _ ->
                 lv.setItemChecked(position, true)
+                val selected = historyEntries[position]
+                selectedSessionId = selected.substringBefore(" |").trim()
                 refreshDetailLists()
             }
         }

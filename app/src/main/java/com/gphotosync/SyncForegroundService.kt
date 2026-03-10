@@ -20,6 +20,7 @@ class SyncForegroundService : Service() {
         var progressCallback: ((SyncProgress) -> Unit)? = null
         var retryItems: List<SyncRecord>? = null
         var logCallback: ((String) -> Unit)? = null
+        var currentSessionId: String = ""
     }
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -177,6 +178,8 @@ class SyncForegroundService : Service() {
         var doneBytes = 0L
         var totalBytes = 0L
 
+        val sessionId = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+        currentSessionId = sessionId
         progressDb.setTotalCount(total)
         notifyProgress("동기화 시작 (${total}개)", done, total)
         liveLog("동기화 시작: 전체 ${total}개, 기존 동기화 ${synced.size}개")
@@ -199,7 +202,7 @@ class SyncForegroundService : Service() {
             if (fileData == null) {
                 errors++; done++
                 liveLog("❌ 다운로드 실패: ${item.filename}")
-                progressDb.addFailedRecord(SyncRecord(item.id, item.filename, "failed", "다운로드 실패", fileSize = 0))
+                progressDb.addFailedRecord(SyncRecord(item.id, item.filename, "failed", "다운로드 실패", fileSize = 0, sessionId = sessionId))
                 progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped, totalBytes, doneBytes))
                 continue
             }
@@ -230,7 +233,7 @@ class SyncForegroundService : Service() {
                 synced.add(item.id)
                 progressDb.saveSyncedId(item.id)
                 progressDb.saveSyncedFileSize(item.id, fileData!!.size.toLong())
-                progressDb.addSuccessRecord(SyncRecord(item.id, item.filename, "success", fileSize = fileData!!.size.toLong()))
+                progressDb.addSuccessRecord(SyncRecord(item.id, item.filename, "success", fileSize = fileData!!.size.toLong(), sessionId = sessionId))
                 progressDb.removeFailedRecord(item.id)
                 liveLog("✅ 완료: ${item.filename} (${String.format("%.1f", fileData!!.size / 1024.0)}KB)")
                 doneBytes += fileData!!.size.toLong()
@@ -241,7 +244,7 @@ class SyncForegroundService : Service() {
             } else {
                 errors++; done++
                 liveLog("❌ 실패: ${item.filename}")
-                progressDb.addFailedRecord(SyncRecord(item.id, item.filename, "failed", "업로드 실패", fileSize = fileData?.size?.toLong() ?: 0))
+                progressDb.addFailedRecord(SyncRecord(item.id, item.filename, "failed", "업로드 실패", fileSize = fileData?.size?.toLong() ?: 0, sessionId = sessionId))
                 progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped, totalBytes, doneBytes))
             }
             delay(300)
@@ -253,7 +256,7 @@ class SyncForegroundService : Service() {
         liveLog(msg)
         notifyProgress(msg, done, total)
         progressDb.setDoneCount(done)
-        progressCallback?.invoke(SyncProgress(done, total, errors, true, null, skipped, totalBytes, doneBytes))
+        progressCallback?.invoke(SyncProgress(done, total, errors, true, null, skipped, totalBytes, doneBytes, sessionId))
     }
 
     private suspend fun retrySync(
@@ -381,5 +384,6 @@ data class SyncProgress(
     val errorMessage: String?,
     val skipped: Int = 0,
     val totalBytes: Long = 0L,
-    val doneBytes: Long = 0L
+    val doneBytes: Long = 0L,
+    val sessionId: String = ""
 )

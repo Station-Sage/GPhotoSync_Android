@@ -11,7 +11,8 @@ data class SyncRecord(
     val status: String, // "success" or "failed"
     val error: String = "",
     val timestamp: Long = System.currentTimeMillis(),
-    val fileSize: Long = 0
+    val fileSize: Long = 0,
+    val sessionId: String = ""
 )
 
 class SyncProgressStore(context: Context) {
@@ -98,6 +99,7 @@ class SyncProgressStore(context: Context) {
                 put("error", r.error)
                 put("timestamp", r.timestamp)
                 put("fileSize", r.fileSize)
+                put("sessionId", r.sessionId)
             })
         }
         return arr.toString()
@@ -115,10 +117,20 @@ class SyncProgressStore(context: Context) {
                     status = obj.optString("status", ""),
                     error = obj.optString("error", ""),
                     timestamp = obj.optLong("timestamp", 0),
-                    fileSize = obj.optLong("fileSize", 0)
+                    fileSize = obj.optLong("fileSize", 0),
+                    sessionId = obj.optString("sessionId", "")
                 ))
             }
         } catch (_: Exception) {}
         return list
     }
+
+    fun getSuccessRecordsBySession(sessionId: String): List<SyncRecord> {
+        return getSuccessRecords().filter { it.sessionId == sessionId }
+    }
+
+    fun getFailedRecordsBySession(sessionId: String): List<SyncRecord> {
+        return getFailedRecords().filter { it.sessionId == sessionId }
+    }
+
 }
