@@ -1,6 +1,8 @@
 package com.gphotosync
 
 import android.app.*
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -62,11 +64,21 @@ class TakeoutUploadService : Service() {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var job: Job? = null
     private val jsonDateMap = java.util.concurrent.ConcurrentHashMap<String, String>()
+    private val folderMutex = Mutex()
     private val createdFolders = mutableSetOf<String>()
 
     // === OkHttp 콜백 → suspend 변환 ===
-    private suspend fun ensureFolderSuspend(api: OneDriveApi, path: String): Boolean =
-        suspendCoroutine { cont -> api.ensureFolder(path) { cont.resume(it) } }
+    private suspend fun ensureFolderSuspend(api: OneDriveApi, path: String): Boolean {
+        for (attempt in 1..3) {
+            val ok = suspendCoroutine<Boolean> { cont -> api.ensureFolder(path) { cont.resume(it) } }
+            if (ok) return true
+            if (attempt < 3) {
+                liveLog("⚠ 폴더 생성 재시도 $attempt/3: $path")
+                kotlinx.coroutines.delay(2000L * attempt)
+            }
+        }
+        return false
+    }
 
     private suspend fun uploadFileSuspend(api: OneDriveApi, data: ByteArray, fn: String, fp: String): String? =
         suspendCoroutine { cont -> api.uploadFile(data, fn, fp) { cont.resume(it) } }
@@ -829,18 +841,18 @@ class TakeoutUploadService : Service() {
                                 val pathInfo = item.fp.substringAfter(api.rootFolder + "/")
                                 liveLog("[W$workerId] ${item.fn} ($pathInfo)")
 
-                                val alreadyCached = synchronized(lock) { item.fp in createdFolders }
-                                val folderOk = if (alreadyCached) true
-                                else {
-                                    val ok = ensureFolderSuspend(api, item.fp)
-                                    if (ok) synchronized(lock) {
-                                        // 전체 경로 + 모든 부분 경로 캐시
-                                        val parts = item.fp.split("/")
-                                        for (i in 1..parts.size) {
-                                            createdFolders.add(parts.take(i).joinToString("/"))
+                                val folderOk = folderMutex.withLock {
+                                    if (item.fp in createdFolders) true
+                                    else {
+                                        val ok = ensureFolderSuspend(api, item.fp)
+                                        if (ok) {
+                                            val parts = item.fp.split("/")
+                                            for (i in 1..parts.size) {
+                                                createdFolders.add(parts.take(i).joinToString("/"))
+                                            }
                                         }
+                                        ok
                                     }
-                                    ok
                                 }
 
                                 var driveItemId: String? = null
