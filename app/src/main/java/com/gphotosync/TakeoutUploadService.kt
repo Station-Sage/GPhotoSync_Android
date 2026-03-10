@@ -153,11 +153,8 @@ class TakeoutUploadService : Service() {
 
     private fun addUploadedFile(name: String) {
         pendingUploaded.add(name)
-        val now = System.currentTimeMillis()
-        if (now - lastFlushTime > 5000 || pendingUploaded.size % 10 == 0) {
-            flushUploadedFiles()
-            lastFlushTime = now
-        }
+        // 매 파일 즉시 flush (크래시/강제종료 시 손실 방지)
+        flushUploadedFiles()
     }
 
     private fun flushUploadedFiles() {
@@ -609,7 +606,8 @@ class TakeoutUploadService : Service() {
                 zis4.close()
 
                 flushUploadedFiles()
-                clearUploadedFiles()
+                // uploaded 목록은 유지 (재실행 시 스킵용)
+                // 사용자가 새 ZIP 선택하면 TakeoutTabHelper에서 초기화
                 clearMediaList()
                 val ok = done - errors - skipped
                 val msg = "완료! 성공:$ok 스킵:$skipped 실패:$errors (전체:$total)"
