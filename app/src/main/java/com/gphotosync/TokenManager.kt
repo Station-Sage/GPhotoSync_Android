@@ -36,6 +36,7 @@ object TokenManager {
     const val KEY_MS_REFRESH = "ms_refresh_token"
     const val KEY_MS_EXPIRY  = "ms_expires_at"
     const val KEY_MS_CLIENT_ID = "ms_client_id"
+    const val KEY_MS_CLIENT_SECRET = "ms_client_secret"
 
     private var prefs: SharedPreferences? = null
 
@@ -144,7 +145,7 @@ object TokenManager {
             .add("client_id", clientId)
             .add("refresh_token", refresh)
             .add("grant_type", "refresh_token")
-            .add("client_secret", "qtyfaBBYA403=unZUP40~_#")
+            .add("client_secret", get("ms_client_secret") ?: "")
             .add("scope", "Files.ReadWrite offline_access")
             .build()
 

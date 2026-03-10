@@ -293,8 +293,21 @@ class TakeoutTabHelper(
 
     fun onZipSelected(uri: Uri) {
         selectedZipUri = uri
+        val prevUri = activity.getSharedPreferences("takeout_session", AppCompatActivity.MODE_PRIVATE)
+            .getString("zip_uri", null)
         activity.getSharedPreferences("takeout_session", AppCompatActivity.MODE_PRIVATE).edit()
             .putString("zip_uri", uri.toString()).apply()
+
+        // 다른 ZIP 파일이면 이전 업로드 기록 초기화
+        if (prevUri != null && prevUri != uri.toString()) {
+            activity.getSharedPreferences("takeout_progress", AppCompatActivity.MODE_PRIVATE).edit().clear().apply()
+            activity.getSharedPreferences("takeout_media_list", AppCompatActivity.MODE_PRIVATE).edit().clear().apply()
+            activity.getSharedPreferences("takeout_analyze", AppCompatActivity.MODE_PRIVATE).edit().clear().apply()
+            activity.getSharedPreferences("takeout_drive_ids", AppCompatActivity.MODE_PRIVATE).edit().clear().apply()
+            activity.getSharedPreferences("takeout_album_map", AppCompatActivity.MODE_PRIVATE).edit().clear().apply()
+            activity.getSharedPreferences("takeout_json_map", AppCompatActivity.MODE_PRIVATE).edit().clear().apply()
+            appendTakeoutLog("새 ZIP 파일 선택됨: 이전 업로드 기록 초기화")
+        }
 
         // 기존 분석 결과가 있으면 재사용
         val savedMedia = activity.getSharedPreferences("takeout_media_list", AppCompatActivity.MODE_PRIVATE)

@@ -444,26 +444,34 @@ class OneDriveApi(private val context: Context) {
     fun listChildren(folderId: String, callback: (List<Triple<String, String, Boolean>>?) -> Unit) {
         TokenManager.getValidMicrosoftToken(client) { token ->
             if (token == null) { callback(null); return@getValidMicrosoftToken }
-            val req = Request.Builder()
-                .url("$GRAPH/me/drive/items/$folderId/children?\$select=id,name,folder&\$top=1000")
-                .header("Authorization", "Bearer $token")
-                .get().build()
-            client.newCall(req).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) { callback(null) }
-                override fun onResponse(call: Call, response: Response) {
-                    response.use {
-                        if (it.code != 200) { callback(null); return }
-                        val arr = try { JSONObject(it.body?.string() ?: "{}").optJSONArray("value") } catch (_: Exception) { null }
-                        if (arr == null) { callback(null); return }
-                        val items = mutableListOf<Triple<String, String, Boolean>>()
-                        for (i in 0 until arr.length()) {
-                            val obj = arr.getJSONObject(i)
-                            items.add(Triple(obj.getString("id"), obj.getString("name"), obj.has("folder")))
+            val allItems = mutableListOf<Triple<String, String, Boolean>>()
+            fun fetchPage(url: String) {
+                val req = Request.Builder().url(url).header("Authorization", "Bearer $token").get().build()
+                client.newCall(req).enqueue(object : Callback {
+                    override fun onFailure(call: Call, e: IOException) { callback(if (allItems.isNotEmpty()) allItems else null) }
+                    override fun onResponse(call: Call, response: Response) {
+                        response.use {
+                            if (it.code != 200) { callback(if (allItems.isNotEmpty()) allItems else null); return }
+                            val body = it.body?.string() ?: "{}"
+                            val json = try { JSONObject(body) } catch (_: Exception) { callback(if (allItems.isNotEmpty()) allItems else null); return }
+                            val arr = json.optJSONArray("value")
+                            if (arr != null) {
+                                for (i in 0 until arr.length()) {
+                                    val obj = arr.getJSONObject(i)
+                                    allItems.add(Triple(obj.getString("id"), obj.getString("name"), obj.has("folder")))
+                                }
+                            }
+                            val nextLink = json.optString("@odata.nextLink", "")
+                            if (nextLink.isNotEmpty()) {
+                                fetchPage(nextLink)
+                            } else {
+                                callback(allItems)
+                            }
                         }
-                        callback(items)
                     }
-                }
-            })
+                })
+            }
+            fetchPage("$GRAPH/me/drive/items/$folderId/children?\$select=id,name,folder&\$top=1000")
         }
     }
 

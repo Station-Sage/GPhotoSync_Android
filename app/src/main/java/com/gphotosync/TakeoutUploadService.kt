@@ -52,7 +52,8 @@ class TakeoutUploadService : Service() {
         var logCallback: ((String) -> Unit)? = null
         var analyzeCallback: ((Int, Long, Int) -> Unit)? = null
         var organizeCallback: ((Int, Int, Int) -> Unit)? = null  // (total, copied, errors)
-        var migrateCallback: ((Int, Int, Int) -> Unit)? = null   // (total, moved, errors)
+        var migrateCallback: ((Int, Int, Int) -> Unit)? = null
+        var skipOneDriveCheck: Boolean = false   // (total, moved, errors)
     }
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -210,10 +211,21 @@ class TakeoutUploadService : Service() {
     private fun clearUploadedFiles() { getSharedPreferences("takeout_progress", MODE_PRIVATE).edit().clear().apply() }
 
     // driveItem id 저장 (파일명 → id)
+    private val pendingDriveIds = mutableMapOf<String, String>()
+
     @Synchronized
     private fun saveDriveItemId(filename: String, driveId: String) {
-        val p = getSharedPreferences("takeout_drive_ids", MODE_PRIVATE)
-        p.edit().putString(filename, driveId).apply()
+        pendingDriveIds[filename] = driveId
+        if (pendingDriveIds.size >= 10) flushDriveItemIds()
+    }
+
+    @Synchronized
+    private fun flushDriveItemIds() {
+        if (pendingDriveIds.isEmpty()) return
+        val p = getSharedPreferences("takeout_drive_ids", MODE_PRIVATE).edit()
+        for ((k, v) in pendingDriveIds) p.putString(k, v)
+        p.apply()
+        pendingDriveIds.clear()
     }
     fun loadDriveItemIds(): Map<String, String> {
         val p = getSharedPreferences("takeout_drive_ids", MODE_PRIVATE)
@@ -620,12 +632,7 @@ class TakeoutUploadService : Service() {
             try {
                 // JSON 메타데이터 로드 (분석에서 이미 수집된 경우)
                 if (jsonDateMap.isEmpty()) loadJsonDateMap()
-                if (jsonDateMap.isEmpty()) {
-                    loadJsonDateMap()
-                    if (jsonDateMap.isNotEmpty()) {
-                        liveLog("저장된 JSON 메타데이터 ${jsonDateMap.size}개 로드 완료")
-                    } else {
-                        liveLog("JSON 메타데이터 수집 중...")
+                    liveLog("JSON 메타데이터 수집 중...")
                         notifyProgress("메타데이터 수집 중...", 0, 0)
                         val cs2 = contentResolver.openInputStream(zipUri)
                         val zis2 = ZipArchiveInputStream(cs2)
@@ -670,6 +677,8 @@ class TakeoutUploadService : Service() {
                     stopSelf(); return@launch
                 }
 
+                val uploadStartTime = System.currentTimeMillis()
+                val uploadStartTime = System.currentTimeMillis()
                 liveLog("미디어 ${total}개. 업로드 시작...")
                 notifyProgress("업로드 시작 (${total}개)", 0, total)
                 progressCallback?.invoke(TakeoutProgress(0, total, 0, false, null))
@@ -707,6 +716,16 @@ class TakeoutUploadService : Service() {
                                 if (e4.name in uploaded) {
                                     if (resume) {
                                         // 이어하기 시: OneDrive에 실제 존재하는지 확인
+                                        if (skipOneDriveCheck) {
+                                            val d = aDone.incrementAndGet()
+                                            val s = aSkipped.incrementAndGet()
+                                            if (s % 100 == 0 || s == 1) {
+                                                val pct = if (total > 0) d * 100 / total else 0
+                                                notifyProgress("스킵 중 ($pct%) ${s}개 완료", d, total)
+                                                progressCallback?.invoke(TakeoutProgress(d, total, aErrors.get(), false, null, aDoneBytes.get(), s))
+                                            }
+                                            drain(zis4); e4 = zis4.nextZipEntry; continue
+                                        }
                                         val checkPath = "$fp/$fn"
                                         val exists = checkFileExistsSuspend(api, checkPath)
                                         if (exists == null) {
@@ -726,6 +745,16 @@ class TakeoutUploadService : Service() {
                                         }
                                     } else {
                                         // 새 업로드도 OneDrive 존재 확인
+                                        if (skipOneDriveCheck) {
+                                            val d = aDone.incrementAndGet()
+                                            val s = aSkipped.incrementAndGet()
+                                            if (s % 100 == 0 || s == 1) {
+                                                val pct = if (total > 0) d * 100 / total else 0
+                                                notifyProgress("스킵 중 ($pct%) ${s}개 완료", d, total)
+                                                progressCallback?.invoke(TakeoutProgress(d, total, aErrors.get(), false, null, aDoneBytes.get(), s))
+                                            }
+                                            drain(zis4); e4 = zis4.nextZipEntry; continue
+                                        }
                                         val checkPath2 = "$fp/$fn"
                                         val exists2 = checkFileExistsSuspend(api, checkPath2)
                                         if (exists2 == null) {
@@ -769,12 +798,8 @@ class TakeoutUploadService : Service() {
                                 tmpOut?.flush(); tmpOut?.close()
                                 val data: ByteArray
                                 if (tmpFile != null) {
-                                    // baos 잔여분을 tmpFile에 flush 후 baos 해제
-                                    if (baos.size() > 0 && tmpFile.length() == 0L.coerceAtLeast(totalRead - baos.size())) {
-                                        // baos 내용은 이미 tmpOut에 write됨 (threshold 초과 시점에)
-                                    }
-                                    baos.reset() // GC 가능하도록 즉시 해제
-                                    data = tmpFile.readBytes()
+                                    baos.reset()
+                                    data = ByteArray(0) // Worker에서 tmpFile로 직접 읽음
                                 } else {
                                     data = baos.toByteArray()
                                     baos.reset()
@@ -814,7 +839,18 @@ class TakeoutUploadService : Service() {
                                     ok
                                 }
 
-                                val driveItemId = if (folderOk) uploadFileSuspend(api, item.data, item.fn, item.fp) else null
+                                var driveItemId: String? = null
+                                if (folderOk) {
+                                    val uploadData = if (item.tmpFile != null && item.tmpFile.exists()) item.tmpFile.readBytes() else item.data
+                                    for (attempt in 1..3) {
+                                        driveItemId = uploadFileSuspend(api, uploadData, item.fn, item.fp)
+                                        if (driveItemId != null) break
+                                        if (attempt < 3) {
+                                            liveLog("⚠ [W$workerId] ${item.fn} 업로드 실패, 재시도 $attempt/3")
+                                            kotlinx.coroutines.delay(1000L * attempt)
+                                        }
+                                    }
+                                }
 
                                 if (driveItemId != null) {
                                     val d = aDone.incrementAndGet()
@@ -843,18 +879,24 @@ class TakeoutUploadService : Service() {
                 workers.forEach { it.join() }
 
                 flushUploadedFiles()
+                flushDriveItemIds()
                 // uploaded 목록은 유지 (재실행 시 스킵용)
                 // 사용자가 새 ZIP 선택하면 TakeoutTabHelper에서 초기화
                 clearMediaList()
                 val done = aDone.get(); val errors = aErrors.get(); val skipped = aSkipped.get(); val doneBytes = aDoneBytes.get()
                 val ok = done - errors - skipped
-                val msg = "완료! 성공:$ok 스킵:$skipped 실패:$errors (전체:$total)"
+                val elapsed = (System.currentTimeMillis() - uploadStartTime) / 1000
+                val minutes = elapsed / 60; val seconds = elapsed % 60
+                val speedMBs = if (elapsed > 0) String.format("%.1f", doneBytes / 1048576.0 / elapsed) else "N/A"
+                val doneMBFinal = String.format("%.1f", doneBytes / 1048576.0)
+                val msg = "완료! 성공:$ok 스킵:$skipped 실패:$errors (전체:$total) | ${doneMBFinal}MB ${minutes}분${seconds}초 ${speedMBs}MB/s"
                 liveLog(msg)
                 (getSystemService(NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIF_ID, buildDoneNotification("✅ $msg"))
                 progressCallback?.invoke(TakeoutProgress(done, total, errors, true, null, doneBytes, skipped))
                 withContext(Dispatchers.Main) { stopForeground(STOP_FOREGROUND_DETACH); stopSelf() }
             } catch (e: CancellationException) {
                 flushUploadedFiles()
+                flushDriveItemIds()
                 liveLog("업로드 중단됨 (이어하기 가능)")
                 progressCallback?.invoke(TakeoutProgress(0,0,0,true,"중단됨 - 이어하기 가능"))
                 stopForeground(STOP_FOREGROUND_DETACH); stopSelf()

@@ -73,6 +73,8 @@ class SyncForegroundService : Service() {
 
     private fun startSync(isRetry: Boolean) {
         logToFile("startSync called, isRetry=$isRetry")
+        synchronized(createdFolders) { createdFolders.clear() }
+        synchronized(createdFolders) { createdFolders.clear() }
         val googleApi   = GooglePhotosApi(this)
         val oneDriveApi = OneDriveApi(this)
         val progressDb  = SyncProgressStore(this)
@@ -206,13 +208,7 @@ class SyncForegroundService : Service() {
                 continue
             }
 
-            val prevSize = progressDb.getSyncedFileSize(item.id)
-            if (prevSize == fileData!!.size.toLong()) {
-                synced.add(item.id); progressDb.saveSyncedId(item.id)
-                done++; skipped++
-                progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped, totalBytes, doneBytes))
-                continue
-            }
+            val safeData = fileData ?: continue
 
             val yearFolder = extractYear(item.filename, item.year)
             val folderPath = "${oneDriveApi.rootFolder}/$yearFolder"
@@ -230,7 +226,7 @@ class SyncForegroundService : Service() {
 
             if (folderOk) {
                 val driveId = suspendCoroutine<String?> { cont ->
-                    oneDriveApi.uploadFile(fileData!!, item.filename, folderPath) { cont.resume(it) }
+                    oneDriveApi.uploadFile(safeData, item.filename, folderPath) { cont.resume(it) }
                 }
                 uploadOk = driveId != null
             }
@@ -238,11 +234,11 @@ class SyncForegroundService : Service() {
             if (uploadOk) {
                 synced.add(item.id)
                 progressDb.saveSyncedId(item.id)
-                progressDb.saveSyncedFileSize(item.id, fileData!!.size.toLong())
-                progressDb.addSuccessRecord(SyncRecord(item.id, item.filename, "success", fileSize = fileData!!.size.toLong(), sessionId = syncSessionId))
+                progressDb.saveSyncedFileSize(item.id, safeData.size.toLong())
+                progressDb.addSuccessRecord(SyncRecord(item.id, item.filename, "success", fileSize = safeData.size.toLong(), sessionId = syncSessionId))
                 progressDb.removeFailedRecord(item.id)
-                liveLog("✅ 완료: ${item.filename} (${String.format("%.1f", fileData!!.size / 1024.0)}KB)")
-                doneBytes += fileData!!.size.toLong()
+                liveLog("✅ 완료: ${item.filename} (${String.format("%.1f", safeData.size / 1024.0)}KB)")
+                doneBytes += safeData.size.toLong()
                 done++
                 val pct = if (total > 0) (done * 100 / total) else 0
                 notifyProgress("동기화 중 ($pct%) - ${item.filename}", done, total)
@@ -250,7 +246,7 @@ class SyncForegroundService : Service() {
             } else {
                 errors++; done++
                 liveLog("❌ 실패: ${item.filename}")
-                progressDb.addFailedRecord(SyncRecord(item.id, item.filename, "failed", "업로드 실패", fileSize = fileData?.size?.toLong() ?: 0, sessionId = syncSessionId))
+                progressDb.addFailedRecord(SyncRecord(item.id, item.filename, "failed", "업로드 실패", fileSize = safeData?.size?.toLong() ?: 0, sessionId = syncSessionId))
                 progressCallback?.invoke(SyncProgress(done, total, errors, false, null, skipped, totalBytes, doneBytes))
             }
             delay(300)
@@ -309,7 +305,7 @@ class SyncForegroundService : Service() {
 
             if (folderOk) {
                 val driveId = suspendCoroutine<String?> { cont ->
-                    oneDriveApi.uploadFile(fileData!!, record.filename, folderPath) { cont.resume(it) }
+                    oneDriveApi.uploadFile(fileData, record.filename, folderPath) { cont.resume(it) }
                 }
                 uploadOk = driveId != null
             }
@@ -317,8 +313,8 @@ class SyncForegroundService : Service() {
             if (uploadOk) {
                 synced.add(record.id)
                 progressDb.saveSyncedId(record.id)
-                progressDb.saveSyncedFileSize(record.id, fileData!!.size.toLong())
-                progressDb.addSuccessRecord(SyncRecord(record.id, record.filename, "success", fileSize = fileData!!.size.toLong()))
+                progressDb.saveSyncedFileSize(record.id, fileData.size.toLong())
+                progressDb.addSuccessRecord(SyncRecord(record.id, record.filename, "success", fileSize = fileData.size.toLong()))
                 progressDb.removeFailedRecord(record.id)
                 done++
                 notifyProgress("재시도 중 ($done/$total) - ${record.filename}", done, total)

@@ -22,7 +22,11 @@ data class MediaItem(
 
 class GooglePhotosApi(private val context: Context) {
 
-    private val client = OkHttpClient.Builder().build()
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        .readTimeout(300, java.util.concurrent.TimeUnit.SECONDS)
+        .writeTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
+        .build()
     private val PICKER_BASE = "https://photospicker.googleapis.com/v1"
 
     private fun logToFile(msg: String) {
