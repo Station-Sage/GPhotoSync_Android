@@ -1162,19 +1162,6 @@ class MainActivity : AppCompatActivity() {
             } else {
                 Toast.makeText(this, "알림 권한이 거부되었습니다. 설정에서 직접 허용해주세요.", Toast.LENGTH_LONG).show()
             }
-        }
-    }
-
-    }
-
- else {
-                    tabLayout.getTabAt(tabIndex)?.select()
-                }
-            }
-        }
-    }
-
-    }
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
@@ -1190,7 +1177,6 @@ class MainActivity : AppCompatActivity() {
             if (tabLayout.selectedTabPosition != tab) {
                 tabLayout.getTabAt(tab)?.select()
             } else if (tab == 3) {
-                // 이미 Takeout 탭이면 콜백 재연결 + 상태 복원
                 setupTakeoutCallbacks()
                 restoreTakeoutState()
             }
@@ -1199,7 +1185,6 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        // 다른 앱에서 돌아올 때 콜백 재연결
         setupTakeoutCallbacks()
         SyncForegroundService.progressCallback = { progress ->
             runOnUiThread { updateProgress(progress) }
@@ -1211,5 +1196,4 @@ class MainActivity : AppCompatActivity() {
             restoreTakeoutState()
         }
     }
-
 }
