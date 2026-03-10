@@ -10,6 +10,9 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.channels.Channel
 import kotlin.coroutines.suspendCoroutine
 import kotlin.coroutines.resume
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicLong
+import java.util.Collections
 import java.io.InputStream
 import java.io.ByteArrayOutputStream
 import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
@@ -162,17 +165,20 @@ class TakeoutUploadService : Service() {
     private var pendingUploaded = mutableSetOf<String>()
     private var lastFlushTime = 0L
 
+    @Synchronized
     private fun addUploadedFile(name: String) {
         pendingUploaded.add(name)
         if (pendingUploaded.size >= 5) flushUploadedFiles()
     }
 
+    @Synchronized
     private fun flushUploadedFiles() {
         if (pendingUploaded.isEmpty()) return
         val p = getSharedPreferences("takeout_progress", MODE_PRIVATE)
         val s = p.getStringSet("uf", emptySet())?.toMutableSet() ?: mutableSetOf()
         s.addAll(pendingUploaded)
         p.edit().putStringSet("uf", s).apply()
+        pendingUploaded.clear()
     }
     private fun clearUploadedFiles() { getSharedPreferences("takeout_progress", MODE_PRIVATE).edit().clear().apply() }
 
@@ -550,7 +556,9 @@ class TakeoutUploadService : Service() {
                     if (uploaded.isNotEmpty()) liveLog("기존 완료 ${uploaded.size}개는 스킵합니다")
                 }
 
-                var done = 0; var errors = 0; var skipped = 0; var doneBytes = 0L
+                val aDone = AtomicInteger(0); val aErrors = AtomicInteger(0)
+                val aSkipped = AtomicInteger(0); val aDoneBytes = AtomicLong(0L)
+                val lock = Any() // 공유 자원 동기화용
 
                 // 파이프라인: ZIP 읽기 → Channel → 병렬 업로드 (3 workers)
                 data class UploadItem(val zipName: String, val fn: String, val fp: String, val data: ByteArray, val fileSize: Long, val tmpFile: java.io.File?)
@@ -573,13 +581,12 @@ class TakeoutUploadService : Service() {
                                 }
 
                                 if (e4.name in uploaded) {
-                                    synchronized(this@launch) {
-                                        done++; skipped++
-                                    }
-                                    if (skipped % 100 == 0 || skipped == 1) {
-                                        val pct = if (total > 0) done * 100 / total else 0
-                                        notifyProgress("스킵 중 (${'$'}pct%) ${'$'}{skipped}개 완료", done, total)
-                                        progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null, doneBytes, skipped))
+                                    val d = aDone.incrementAndGet()
+                                    val s = aSkipped.incrementAndGet()
+                                    if (s % 100 == 0 || s == 1) {
+                                        val pct = if (total > 0) d * 100 / total else 0
+                                        notifyProgress("스킵 중 (${'$'}pct%) ${'$'}{s}개 완료", d, total)
+                                        progressCallback?.invoke(TakeoutProgress(d, total, aErrors.get(), false, null, aDoneBytes.get(), s))
                                     }
                                     drain(zis4); e4 = zis4.nextZipEntry; continue
                                 }
@@ -624,27 +631,29 @@ class TakeoutUploadService : Service() {
                                 val pathInfo = item.fp.substringAfter(api.rootFolder + "/")
                                 liveLog("[W${'$'}workerId] ${'$'}{item.fn} (${'$'}pathInfo)")
 
-                                val folderOk = if (item.fp in createdFolders) true
+                                val alreadyCached = synchronized(lock) { item.fp in createdFolders }
+                                val folderOk = if (alreadyCached) true
                                 else {
                                     val ok = ensureFolderSuspend(api, item.fp)
-                                    if (ok) createdFolders.add(item.fp)
+                                    if (ok) synchronized(lock) { createdFolders.add(item.fp) }
                                     ok
                                 }
 
                                 val uOk = if (folderOk) uploadFileSuspend(api, item.data, item.fn, item.fp) else false
 
-                                synchronized(this@launch) {
-                                    if (uOk) {
-                                        done++; doneBytes += item.fileSize; uploaded.add(item.zipName); addUploadedFile(item.zipName)
-                                        val pct = if (total > 0) done * 100 / total else 0
-                                        val sizeKB = String.format("%.1f", item.fileSize / 1024.0)
-                                        liveLog("✅ ${'$'}{item.fn} (${'$'}{sizeKB}KB)")
-                                        notifyProgress("업로드 ${'$'}pct% - ${'$'}{item.fn}", done, total)
-                                    } else {
-                                        done++; errors++; liveLog("❌ ${'$'}{item.fn}")
-                                    }
-                                    progressCallback?.invoke(TakeoutProgress(done, total, errors, false, null, doneBytes, skipped))
+                                if (uOk) {
+                                    val d = aDone.incrementAndGet()
+                                    aDoneBytes.addAndGet(item.fileSize)
+                                    synchronized(lock) { uploaded.add(item.zipName); addUploadedFile(item.zipName) }
+                                    val pct = if (total > 0) d * 100 / total else 0
+                                    val sizeKB = String.format("%.1f", item.fileSize / 1024.0)
+                                    liveLog("✅ ${'$'}{item.fn} (${'$'}{sizeKB}KB)")
+                                    notifyProgress("업로드 ${'$'}pct% - ${'$'}{item.fn}", d, total)
+                                } else {
+                                    aDone.incrementAndGet(); aErrors.incrementAndGet()
+                                    liveLog("❌ ${'$'}{item.fn}")
                                 }
+                                progressCallback?.invoke(TakeoutProgress(aDone.get(), total, aErrors.get(), false, null, aDoneBytes.get(), aSkipped.get()))
                             } finally { item.tmpFile?.delete() }
                         }
                     }
@@ -658,6 +667,7 @@ class TakeoutUploadService : Service() {
                 // uploaded 목록은 유지 (재실행 시 스킵용)
                 // 사용자가 새 ZIP 선택하면 TakeoutTabHelper에서 초기화
                 clearMediaList()
+                val done = aDone.get(); val errors = aErrors.get(); val skipped = aSkipped.get(); val doneBytes = aDoneBytes.get()
                 val ok = done - errors - skipped
                 val msg = "완료! 성공:$ok 스킵:$skipped 실패:$errors (전체:$total)"
                 liveLog(msg)
