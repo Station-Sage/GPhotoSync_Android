@@ -570,7 +570,7 @@ class TakeoutUploadService : Service() {
 
                         // 스트리밍 읽기: 먼저 4MB까지 메모리에 시도, 초과 시 tmpFile로 전환
                         val threshold = 4 * 1024 * 1024
-                        val baos = java.io.ByteArrayOutputStream(minOf(entry?.size?.toInt() ?: 65536, threshold))
+                        val baos = java.io.ByteArrayOutputStream(65536)
                         var tmpFile: java.io.File? = null
                         var tmpOut: java.io.OutputStream? = null
                         val buf = ByteArray(32768)
