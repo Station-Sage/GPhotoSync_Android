@@ -49,7 +49,7 @@ class OneDriveApi(private val context: Context) {
         val body = JSONObject().apply {
             put("name", name)
             put("folder", JSONObject())
-            put("@microsoft.graph.conflictBehavior", "replace")
+            put("@microsoft.graph.conflictBehavior", "fail")
         }.toString().toRequestBody("application/json".toMediaType())
 
         val req = Request.Builder()

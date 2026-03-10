@@ -51,7 +51,6 @@ class TakeoutUploadService : Service() {
     private var job: Job? = null
     private val jsonDateMap = mutableMapOf<String, String>()
     private val createdFolders = mutableSetOf<String>()
-    private val createdFolders = mutableSetOf<String>()
 
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onCreate() { super.onCreate(); createNotificationChannel() }
