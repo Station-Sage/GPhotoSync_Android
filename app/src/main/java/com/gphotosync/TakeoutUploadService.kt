@@ -824,10 +824,7 @@ class TakeoutUploadService : Service() {
                                     aDone.incrementAndGet(); aErrors.incrementAndGet()
                                     liveLog("❌ ${item.fn}")
                                 }
-                                val nowMs = System.currentTimeMillis()
-                                if (nowMs - lastNotifyTime > 500 || aDone.get() >= total) {
-                                    progressCallback?.invoke(TakeoutProgress(aDone.get(), total, aErrors.get(), false, null, aDoneBytes.get(), aSkipped.get()))
-                                }
+                                progressCallback?.invoke(TakeoutProgress(aDone.get(), total, aErrors.get(), false, null, aDoneBytes.get(), aSkipped.get()))
                             } finally { item.tmpFile?.delete() }
                         }
                     }
