@@ -1159,12 +1159,16 @@ class MainActivity : AppCompatActivity() {
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
-        intent?.let { handleOpenTab(it) }
+        if (intent != null) {
+            setIntent(intent)
+            handleOpenTab(intent)
+        }
     }
 
     private fun handleOpenTab(intent: Intent) {
         val tabIndex = intent.getIntExtra("OPEN_TAB", -1)
         if (tabIndex >= 0) {
+            intent.removeExtra("OPEN_TAB")
             val tabLayout = findViewById<TabLayout>(R.id.tabLayout)
             if (tabIndex < tabLayout.tabCount) {
                 tabLayout.getTabAt(tabIndex)?.select()
@@ -1175,5 +1179,10 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         updateAuthUI()
+        // 다른 앱에서 돌아왔을 때 현재 Takeout 탭이면 상태 복원
+        val tabLayout = findViewById<TabLayout>(R.id.tabLayout)
+        if (tabLayout.selectedTabPosition == 3) {
+            restoreTakeoutState()
+        }
     }
 }
