@@ -200,7 +200,7 @@ class TakeoutUploadService : Service() {
                     val st = loadAnalyzeState()
                     skipCount = st[0].toInt(); mediaCount = st[1].toInt(); totalSize = st[2]; jsonCount = st[3].toInt()
                     loadJsonDateMap()
-                    liveLog("분석 이어하기: $skipCount개부터 재개 (미디어 $mediaCount, JSON $jsonCount)")
+                    liveLog("분석 이어하기: ${skipCount}개부터 재개 (미디어 ${mediaCount}, JSON ${jsonCount})")
                 } else {
                     clearAnalyzeState(); jsonDateMap.clear()
                     liveLog("ZIP 파일 분석 시작...")
@@ -247,7 +247,7 @@ class TakeoutUploadService : Service() {
                             notifyProgress("분석 $pct% ($rdMB/$zipMB MB) | 파일$sc 미디어$mediaCount",
                                 if (zipBytes > 0) (cs.bytesRead / 1048576).toInt() else 0,
                                 if (zipBytes > 0) (zipBytes / 1048576).toInt() else 0)
-                            if (sc.rem(500) == 0) liveLog("분석 $pct%: ${sc}개 스캔, 미디어 $mediaCount, JSON $jsonCount")
+                            if (sc.rem(500) == 0) liveLog("분석 $pct%: ${sc}개 스캔, 미디어 ${mediaCount}, JSON $jsonCount")
                             if (zipBytes > 0) progressCallback?.invoke(TakeoutProgress(pct, 100, 0, false, null, cs.bytesRead, 0))
                         }
                     }
