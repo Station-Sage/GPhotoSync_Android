@@ -15,12 +15,14 @@ class TakeoutUploadService : Service() {
     companion object {
         const val ACTION_START = "com.gphotosync.TAKEOUT_START"
         const val ACTION_STOP = "com.gphotosync.TAKEOUT_STOP"
+        const val ACTION_ANALYZE = "com.gphotosync.TAKEOUT_ANALYZE"
         const val EXTRA_ZIP_URI = "zip_uri"
         const val CHANNEL_ID = "takeout_channel"
         const val NOTIF_ID = 2001
 
         var progressCallback: ((TakeoutProgress) -> Unit)? = null
         var logCallback: ((String) -> Unit)? = null
+        var analyzeCallback: ((Int, Long, Int) -> Unit)? = null  // mediaCount, totalSize, scannedCount
     }
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -45,6 +47,13 @@ class TakeoutUploadService : Service() {
             ACTION_STOP -> {
                 job?.cancel()
                 stopSelf()
+            }
+            ACTION_ANALYZE -> {
+                val uriStr = intent.getStringExtra(EXTRA_ZIP_URI) ?: return START_NOT_STICKY
+                val startDate = intent.getStringExtra("start_date")
+                val endDate = intent.getStringExtra("end_date")
+                startForeground(NOTIF_ID, buildNotification("ZIP 파일 분석 중...", 0, 0))
+                analyzeZip(Uri.parse(uriStr), startDate, endDate)
             }
         }
         return START_NOT_STICKY
@@ -89,6 +98,60 @@ class TakeoutUploadService : Service() {
         if (startDate != null && fileDate < startDate) return false
         if (endDate != null && fileDate > endDate) return false
         return true
+    }
+
+    private fun analyzeZip(zipUri: Uri, startDate: String?, endDate: String?) {
+        job = scope.launch {
+            try {
+                liveLog("ZIP 파일 분석 시작...")
+                notifyProgress("ZIP 분석 중...", 0, 0)
+
+                val inputStream = contentResolver.openInputStream(zipUri)
+                val zis = ZipArchiveInputStream(inputStream)
+                var mediaCount = 0
+                var totalSize = 0L
+                var scannedCount = 0
+                var entry = zis.nextZipEntry
+
+                while (entry != null && isActive) {
+                    if (!entry.isDirectory) {
+                        scannedCount++
+                        if (isMediaFile(entry.name)) {
+                            val fname = entry.name.substringAfterLast('/')
+                            val fileDate = extractDateFromName(fname, entry.name)
+                            if (isInDateRange(fileDate, startDate, endDate)) {
+                                mediaCount++
+                                val sz = entry.size
+                                if (sz > 0) totalSize += sz
+                            }
+                        }
+                        if (scannedCount % 500 == 0) {
+                            notifyProgress("ZIP 분석 중... (${scannedCount}개 스캔, 미디어 ${mediaCount}개)", 0, 0)
+                            liveLog("분석 중: ${scannedCount}개 스캔, 미디어 ${mediaCount}개 발견")
+                        }
+                    }
+                    entry = zis.nextZipEntry
+                }
+                zis.close()
+
+                liveLog("분석 완료: 전체 ${scannedCount}개 파일, 미디어 ${mediaCount}개")
+                notifyProgress("분석 완료: 미디어 ${mediaCount}개", 0, 0)
+
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    analyzeCallback?.invoke(mediaCount, totalSize, scannedCount)
+                }
+
+                stopForeground(STOP_FOREGROUND_DETACH)
+                stopSelf()
+            } catch (e: Exception) {
+                liveLog("ZIP 분석 실패: ${e.message}")
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    analyzeCallback?.invoke(-1, 0L, 0)
+                }
+                stopForeground(STOP_FOREGROUND_DETACH)
+                stopSelf()
+            }
+        }
     }
 
     private fun startUpload(zipUri: Uri, startDate: String? = null, endDate: String? = null) {
@@ -272,7 +335,7 @@ class TakeoutUploadService : Service() {
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
-                CHANNEL_ID, "Takeout 업로드", NotificationManager.IMPORTANCE_LOW
+                CHANNEL_ID, "Takeout 업로드", NotificationManager.IMPORTANCE_DEFAULT
             ).apply { description = "Google Takeout → OneDrive 업로드 진행" }
             (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
                 .createNotificationChannel(channel)

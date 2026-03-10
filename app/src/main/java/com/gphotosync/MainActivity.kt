@@ -516,65 +516,43 @@ class MainActivity : AppCompatActivity() {
         selectedZipUri = uri
         val v = takeoutView ?: return
 
-        appendTakeoutLog("ZIP 파일 선택됨, 분석 중...")
+        appendTakeoutLog("ZIP 파일 선택됨, 분석 시작...")
         v.findViewById<TextView>(R.id.tvZipInfo).text = "ZIP 파일 분석 중..."
         v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = false
+        v.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar).visibility = View.VISIBLE
+        v.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar).isIndeterminate = true
+        v.findViewById<TextView>(R.id.tvTakeoutProgress).visibility = View.VISIBLE
+        v.findViewById<TextView>(R.id.tvTakeoutProgress).text = "분석 중..."
+        v.findViewById<TextView>(R.id.tvTakeoutStatus).text = "백그라운드에서 ZIP 분석 중..."
 
-        Thread {
-            try {
-                val input = contentResolver.openInputStream(uri)
-                val zis = ZipArchiveInputStream(input)
-                var mediaCount = 0
-                var totalSize = 0L
-                val imageExt = setOf("jpg","jpeg","png","gif","bmp","webp","heic","heif","tiff","tif","raw","cr2","nef","arw","dng")
-                val videoExt = setOf("mp4","mov","avi","mkv","wmv","flv","webm","m4v","3gp")
-                var entry = zis.nextZipEntry
-                val startD = filterStartDate
-                val endD = filterEndDate
-                val yearPattern = Regex("""((?:19|20)\d{2})[\-_]?(\d{2})[\-_]?(\d{2})""")
-                var scannedCount = 0
-                while (entry != null) {
-                    if (!entry.isDirectory) {
-                        scannedCount++
-                        val ext = entry.name.substringAfterLast('.', "").lowercase()
-                        if (ext in imageExt || ext in videoExt) {
-                            val fname = entry.name.substringAfterLast('/')
-                            val match = yearPattern.find(fname) ?: yearPattern.find(entry.name)
-                            val fileDate = if (match != null) "${match.groupValues[1]}-${match.groupValues[2]}-${match.groupValues[3]}" else null
-                            val inRange = when {
-                                fileDate == null -> startD == null && endD == null
-                                startD != null && fileDate < startD -> false
-                                endD != null && fileDate > endD -> false
-                                else -> true
-                            }
-                            if (inRange) {
-                                mediaCount++
-                                val sz = entry.size
-                                if (sz > 0) totalSize += sz
-                            }
-                        }
-                    }
-                    entry = zis.nextZipEntry
-                }
-                zis.close()
+        // 분석 결과 콜백 설정
+        TakeoutUploadService.analyzeCallback = { mediaCount, totalSize, scannedCount ->
+            val vv = takeoutView ?: return@analyzeCallback
+            vv.findViewById<android.widget.ProgressBar>(R.id.takeoutProgressBar).visibility = View.GONE
+            vv.findViewById<TextView>(R.id.tvTakeoutProgress).visibility = View.GONE
+            if (mediaCount < 0) {
+                vv.findViewById<TextView>(R.id.tvZipInfo).text = "ZIP 분석 실패"
+                appendTakeoutLog("ZIP 분석 실패")
+            } else {
                 val sizeMB = String.format("%.1f", totalSize / 1024.0 / 1024.0)
                 val sizeText = if (totalSize > 0) " (약 ${sizeMB}MB)" else ""
-                runOnUiThread {
-                    v.findViewById<TextView>(R.id.tvZipInfo).text = "미디어 파일: ${mediaCount}개${sizeText} (전체 ${scannedCount}개 스캔)"
-                    v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = mediaCount > 0
-                    appendTakeoutLog("분석 완료: 미디어 ${mediaCount}개 발견 (전체 ${scannedCount}개 파일)")
-                    if (mediaCount == 0) {
-                        appendTakeoutLog("미디어 파일이 없습니다. 날짜 필터를 확인하세요.")
-                    }
-                }
-            } catch (e: Exception) {
-                runOnUiThread {
-                    v.findViewById<TextView>(R.id.tvZipInfo).text = "ZIP 분석 실패: ${e.message}"
-                    appendTakeoutLog("ZIP 분석 실패: ${e.message}")
-                    v.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = false
+                vv.findViewById<TextView>(R.id.tvZipInfo).text = "미디어 파일: ${mediaCount}개${sizeText} (전체 ${scannedCount}개 스캔)"
+                vv.findViewById<android.widget.Button>(R.id.btnStartTakeout).isEnabled = mediaCount > 0
+                appendTakeoutLog("분석 완료: 미디어 ${mediaCount}개 발견 (전체 ${scannedCount}개 파일)")
+                if (mediaCount == 0) {
+                    appendTakeoutLog("미디어 파일이 없습니다. 날짜 필터를 확인하세요.")
                 }
             }
-        }.start()
+            vv.findViewById<TextView>(R.id.tvTakeoutStatus).text = "ZIP 파일을 선택 후 업로드하세요"
+        }
+
+        // ForegroundService로 분석 실행
+        val intent = Intent(this, TakeoutUploadService::class.java)
+        intent.action = TakeoutUploadService.ACTION_ANALYZE
+        intent.putExtra(TakeoutUploadService.EXTRA_ZIP_URI, uri.toString())
+        if (filterStartDate != null) intent.putExtra("start_date", filterStartDate)
+        if (filterEndDate != null) intent.putExtra("end_date", filterEndDate)
+        startForegroundService(intent)
     }
 
 
@@ -874,7 +852,29 @@ class MainActivity : AppCompatActivity() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                 != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9999)
+                if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.POST_NOTIFICATIONS)) {
+                    AlertDialog.Builder(this)
+                        .setTitle("알림 권한 필요")
+                        .setMessage("동기화 진행 상태를 알림으로 표시하려면 알림 권한이 필요합니다.")
+                        .setPositiveButton("권한 허용") { _, _ ->
+                            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9999)
+                        }
+                        .setNegativeButton("취소", null)
+                        .show()
+                } else {
+                    ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 9999)
+                }
+            }
+        }
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 9999) {
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "알림 권한이 허용되었습니다", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "알림 권한이 거부되었습니다. 설정에서 직접 허용해주세요.", Toast.LENGTH_LONG).show()
             }
         }
     }
