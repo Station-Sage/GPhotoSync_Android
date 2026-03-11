@@ -128,8 +128,6 @@ class OAuthActivity : AppCompatActivity() {
     }
 
     private fun exchangeCodeForToken(code: String) {
-        if (codeHandled) return
-        codeHandled = true
 
         Toast.makeText(this, "토큰 교환 중...", Toast.LENGTH_SHORT).show()
 
