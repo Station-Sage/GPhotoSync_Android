@@ -19,20 +19,6 @@ import java.io.InputStream
 import java.io.ByteArrayOutputStream
 import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
 
-class CountingInputStream(private val wrapped: InputStream) : InputStream() {
-    var bytesRead: Long = 0L
-        private set
-    override fun read(): Int {
-        val b = wrapped.read()
-        if (b != -1) bytesRead++
-        return b
-    }
-    override fun read(b: ByteArray, off: Int, len: Int): Int {
-        val n = wrapped.read(b, off, len)
-        if (n > 0) bytesRead += n
-        return n
-    }
-    override fun close() = wrapped.close()
     override fun available() = wrapped.available()
 }
 
@@ -150,25 +136,6 @@ class TakeoutUploadService : Service() {
     }
 
     // === 스트림 드레인: 메모리에 올리지 않고 스트림 소비 ===
-    private val drainBuf = ByteArray(262144) // 256KB
-    private fun drain(zis: ZipArchiveInputStream) {
-        try { while (zis.read(drainBuf) != -1) { } } catch (_: Exception) {}
-    }
-
-    // === JSON을 스트리밍으로 읽기 (최대 64KB만, 그 이상은 스킵) ===
-    private fun readJsonSafe(zis: ZipArchiveInputStream): String? {
-        val maxSize = 65536
-        val baos = ByteArrayOutputStream(8192)
-        val buf = ByteArray(32768)
-        var total = 0
-        var n = zis.read(buf)
-        while (n != -1) {
-            total += n
-            if (total <= maxSize) baos.write(buf, 0, n)
-            n = zis.read(buf)
-        }
-        return if (total <= maxSize) baos.toString(Charsets.UTF_8.name()) else null
-    }
 
     // === 진행 상태 저장/로드 ===
     private fun saveAnalyzeState(sc: Int, mc: Int, ts: Long, jc: Int) {
@@ -315,81 +282,6 @@ class TakeoutUploadService : Service() {
         android.os.Handler(android.os.Looper.getMainLooper()).post { updateLogCallback?.invoke(workerId, entry) }
     }
 
-    private val imageExt = setOf("jpg","jpeg","png","gif","bmp","webp","heic","heif","tiff","tif","raw","cr2","nef","arw","dng","svg")
-    private val videoExt = setOf("mp4","mov","avi","mkv","wmv","flv","webm","m4v","3gp","3g2","mts","m2ts")
-    private fun isMedia(name: String) = name.substringAfterLast('.', "").lowercase().let { it in imageExt || it in videoExt }
-
-    private fun parseJsonMeta(json: String): Pair<String, String>? {
-        try {
-            val obj = org.json.JSONObject(json)
-            val title = obj.optString("title", "")
-            var ts = 0L
-            if (obj.has("photoTakenTime")) ts = obj.getJSONObject("photoTakenTime").optString("timestamp","0").toLongOrNull() ?: 0L
-            if (ts == 0L && obj.has("creationTime")) ts = obj.getJSONObject("creationTime").optString("timestamp","0").toLongOrNull() ?: 0L
-            if (title.isNotEmpty() && ts > 0) {
-                val d = java.util.Date(ts * 1000)
-                val y = java.text.SimpleDateFormat("yyyy", java.util.Locale.getDefault()).format(d)
-                return Pair(title, y)
-            }
-        } catch (_: Exception) {}
-        return null
-    }
-
-
-    // Takeout ZIP 경로에서 앨범명 추출
-    // "Takeout/Google Photos/Photos from 2024/file.jpg" → null (날짜 폴더)
-    // "Takeout/Google Photos/여행 2023/file.jpg" → "여행 2023" (앨범)
-    private val dateFolderPatterns = listOf(
-        Regex("""Photos from \d{4}"""),
-        Regex("""^\d{4}년\s*\d{1,2}월\s*\d{1,2}일$"""),
-        Regex("""^\d{4}-\d{2}-\d{2}$""")
-    )
-
-    private fun extractAlbumName(zipPath: String): String? {
-        // 경로: Takeout/Google Photos/폴더명/파일명 또는 Takeout/Google 포토/폴더명/파일명
-        val parts = zipPath.split("/")
-        if (parts.size < 3) return null
-
-        // "Google Photos" 또는 "Google 포토" 다음 폴더가 앨범 후보
-        val gpIdx = parts.indexOfFirst { it == "Google Photos" || it == "Google 포토" || it.startsWith("Google") }
-        if (gpIdx < 0 || gpIdx + 1 >= parts.size - 1) return null
-
-        val folderName = parts[gpIdx + 1]
-
-        // 날짜 폴더 패턴이면 앨범 아님
-        for (p in dateFolderPatterns) {
-            if (p.matches(folderName)) return null
-        }
-
-        // 빈 문자열이나 너무 짧으면 무시
-        if (folderName.isBlank() || folderName.length < 2) return null
-
-        return folderName
-    }
-
-    private fun yearOnly(filename: String, path: String): String {
-        jsonDateMap[filename]?.let {
-            // 이전 버전 호환: "2015/05" 형태면 연도만 추출
-            return it.substringBefore("/")
-        }
-        val yr = Regex("""((?:19|20)\d{2})""")
-        (yr.find(filename) ?: yr.find(path))?.let { return it.groupValues[1] }
-        return "unknown"
-    }
-
-    private fun dateFromName(filename: String, path: String): String? {
-        val p = Regex("""((?:19|20)\d{2})[-_]?(\d{2})[-_]?(\d{2})""")
-        val m = p.find(filename) ?: p.find(path) ?: return null
-        return "${m.groupValues[1]}-${m.groupValues[2]}-${m.groupValues[3]}"
-    }
-
-    private fun inRange(fd: String?, s: String?, e: String?): Boolean {
-        if (s == null && e == null) return true
-        if (fd == null) return false
-        if (s != null && fd < s) return false
-        if (e != null && fd > e) return false
-        return true
-    }
 
     // ======== ZIP 분석 ========
     private fun analyzeZip(zipUri: Uri, startDate: String?, endDate: String?, resume: Boolean) {
@@ -422,7 +314,7 @@ class TakeoutUploadService : Service() {
                     if (!entry.isDirectory) {
                         sc++
                         if (sc <= skipCount) {
-                            drain(zis)
+                            drainZipEntry(zis)
                             if (sc.rem(2000) == 0) notifyProgress("이전 위치로 이동 중... $sc/$skipCount", sc, skipCount)
                             entry = zis.nextZipEntry; continue
                         }
@@ -433,7 +325,7 @@ class TakeoutUploadService : Service() {
                                 val r = parseJsonMeta(js)
                                 if (r != null) { jsonDateMap[r.first] = r.second; jsonCount++ }
                             }
-                        } else if (isMedia(entry.name)) {
+                        } else if (isMediaFile(entry.name)) {
                             val fn = entry.name.substringAfterLast('/')
                             val fd = dateFromName(fn, entry.name)
                             if (inRange(fd, startDate, endDate)) {
@@ -441,9 +333,9 @@ class TakeoutUploadService : Service() {
                                 val album = extractAlbumName(entry.name)
                                 if (album != null) albumMap[entry.name] = album
                             }
-                            drain(zis)
+                            drainZipEntry(zis)
                         } else {
-                            drain(zis)
+                            drainZipEntry(zis)
                         }
 
                         if (sc.rem(500) == 0) {
@@ -618,7 +510,7 @@ class TakeoutUploadService : Service() {
 
                         // 2. 없으면 OneDrive에서 경로로 조회
                         val fn = zp.substringAfterLast('/')
-                        val yr = yearOnly(fn, zp)
+                        val yr = yearOnly(fn, zp, jsonDateMap)
                         val filePath = "${api.rootFolder}/$yr/$fn"
                         val id = getItemIdSuspend(api, filePath)
                         if (id != null) {
@@ -686,7 +578,7 @@ class TakeoutUploadService : Service() {
                         if (!je.isDirectory && je.name.endsWith(".json")) {
                             val js = readJsonSafe(zis2)
                             if (js != null) { parseJsonMeta(js)?.let { jsonDateMap[it.first] = it.second; jc++ } }
-                        } else { drain(zis2) }
+                        } else { drainZipEntry(zis2) }
                         je = zis2.nextZipEntry
                     }
                     zis2.close()
@@ -703,11 +595,11 @@ class TakeoutUploadService : Service() {
                     val zis3 = ZipArchiveInputStream(contentResolver.openInputStream(zipUri))
                     var e3 = zis3.nextZipEntry
                     while (e3 != null && isActive) {
-                        if (!e3.isDirectory && isMedia(e3.name)) {
+                        if (!e3.isDirectory && isMediaFile(e3.name)) {
                             val fn = e3.name.substringAfterLast('/')
                             if (inRange(dateFromName(fn, e3.name), startDate, endDate)) tempNames.add(e3.name)
                         }
-                        drain(zis3)
+                        drainZipEntry(zis3)
                         e3 = zis3.nextZipEntry
                     }
                     zis3.close()
@@ -792,7 +684,6 @@ class TakeoutUploadService : Service() {
                 val lock = Any() // 공유 자원 동기화용
 
                 // 파이프라인: ZIP 읽기 → Channel → 병렬 업로드 (3 workers)
-                data class UploadItem(val zipName: String, val fn: String, val fp: String, val data: ByteArray, val fileSize: Long, val tmpFile: java.io.File?)
                 val channel = Channel<UploadItem>(8) // 버퍼 8개: Producer가 미리 읽어둠
 
                 // Producer: ZIP에서 읽어서 Channel에 전달
@@ -804,7 +695,7 @@ class TakeoutUploadService : Service() {
                             if (!e4.isDirectory && e4.name in mediaNames) {
                                 val fn = e4.name.substringAfterLast('/')
                                 // 모든 파일은 연도 폴더에 업로드 (앨범은 bundle로 별도 생성)
-                                val ym = yearOnly(fn, e4.name)
+                                val ym = yearOnly(fn, e4.name, jsonDateMap)
                                 val fp = "${api.rootFolder}/$ym"
 
                                 if (e4.name in uploaded) {
@@ -818,7 +709,7 @@ class TakeoutUploadService : Service() {
                                                 notifyProgress("스킵 중 ($pct%) ${s}개 완료", d, total)
                                                 progressCallback?.invoke(TakeoutProgress(d, total, aErrors.get(), false, null, aDoneBytes.get(), s))
                                             }
-                                            drain(zis4); e4 = zis4.nextZipEntry; continue
+                                            drainZipEntry(zis4); e4 = zis4.nextZipEntry; continue
                                         }
                                         val checkPath = "$fp/$fn"
                                         val exists = checkFileExistsSuspend(api, checkPath)
@@ -835,7 +726,7 @@ class TakeoutUploadService : Service() {
                                                 notifyProgress("스킵 중 ($pct%) ${s}개 완료", d, total)
                                                 progressCallback?.invoke(TakeoutProgress(d, total, aErrors.get(), false, null, aDoneBytes.get(), s))
                                             }
-                                            drain(zis4); e4 = zis4.nextZipEntry; continue
+                                            drainZipEntry(zis4); e4 = zis4.nextZipEntry; continue
                                         }
                                     } else {
                                         // 새 업로드도 OneDrive 존재 확인
@@ -847,7 +738,7 @@ class TakeoutUploadService : Service() {
                                                 notifyProgress("스킵 중 ($pct%) ${s}개 완료", d, total)
                                                 progressCallback?.invoke(TakeoutProgress(d, total, aErrors.get(), false, null, aDoneBytes.get(), s))
                                             }
-                                            drain(zis4); e4 = zis4.nextZipEntry; continue
+                                            drainZipEntry(zis4); e4 = zis4.nextZipEntry; continue
                                         }
                                         val checkPath2 = "$fp/$fn"
                                         val exists2 = checkFileExistsSuspend(api, checkPath2)
@@ -862,7 +753,7 @@ class TakeoutUploadService : Service() {
                                                 notifyProgress("스킵 중 ($pct%) ${s}개 완료", d, total)
                                                 progressCallback?.invoke(TakeoutProgress(d, total, aErrors.get(), false, null, aDoneBytes.get(), s))
                                             }
-                                            drain(zis4); e4 = zis4.nextZipEntry; continue
+                                            drainZipEntry(zis4); e4 = zis4.nextZipEntry; continue
                                         }
                                     }
                                 }
@@ -905,7 +796,7 @@ class TakeoutUploadService : Service() {
                                     tmpFile?.delete()
                                     throw ce
                                 }
-                            } else { drain(zis4) }
+                            } else { drainZipEntry(zis4) }
                             e4 = zis4.nextZipEntry
                         }
                     } finally { zis4.close(); channel.close() }
@@ -1087,7 +978,3 @@ class TakeoutUploadService : Service() {
     override fun onDestroy() { android.util.Log.w("TakeoutUpload", "onDestroy called - service killed"); super.onDestroy(); try { logWriter?.close() } catch (_: Exception) {}; job?.cancel(); scope.cancel() }
 }
 
-data class TakeoutProgress(
-    val done: Int, val total: Int, val errors: Int, val finished: Boolean,
-    val errorMessage: String?, val doneBytes: Long = 0L, val skipped: Int = 0
-)
