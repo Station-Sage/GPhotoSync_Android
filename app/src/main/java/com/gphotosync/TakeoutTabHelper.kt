@@ -76,6 +76,15 @@ class TakeoutTabHelper(
         }
     }
     fun restorePreviousSession() {
+        if (TakeoutUploadService.isRunning) {
+            isTakeoutUploading = true
+            setupCallbacks()
+            val p = TakeoutUploadService.currentProgress
+            if (p != null) {
+                activity.runOnUiThread { applyUploadingUI(p) }
+            }
+            return
+        }
         val prefs = activity.getSharedPreferences("takeout_session", AppCompatActivity.MODE_PRIVATE)
         val savedUri = prefs.getString("zip_uri", null)
         if (savedUri != null && selectedZipUri == null) {
@@ -136,7 +145,7 @@ class TakeoutTabHelper(
         }
 
         // 상태별 UI 분기
-        val isUploading = TakeoutUploadService.isRunning || isTakeoutUploading
+        val isUploading = TakeoutUploadService.isRunning || isTakeoutUploading || (TakeoutUploadService.currentProgress != null && TakeoutUploadService.currentProgress!!.finished != true)
         if (isTakeoutAnalyzing) {
             // === 분석 중 ===
             val pb = takeoutView.findViewById<ProgressBar>(R.id.takeoutProgressBar)

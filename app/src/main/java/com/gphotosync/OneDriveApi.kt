@@ -159,27 +159,46 @@ class OneDriveApi(private val context: Context) {
             if (offset >= total) { callback(null); return } // should not reach here
             val end   = minOf(offset + chunkSize, total)
             val chunk = data.copyOfRange(offset, end)
-            val req   = Request.Builder()
-                .url(uploadUrl)
-                .header("Content-Length", chunk.size.toString())
-                .header("Content-Range", "bytes $offset-${end - 1}/$total")
-                .put(chunk.toRequestBody("application/octet-stream".toMediaType()))
-                .build()
 
-            client.newCall(req).enqueue(object : Callback {
-                override fun onFailure(call: Call, e: IOException) { logToFile("[OD] chunked onFailure: ${e.message}"); callback(null) }
-                override fun onResponse(call: Call, response: Response) {
-                    val respBody = response.body?.string()
-                    if (response.code in listOf(200, 201)) {
-                        // 완료 — id 추출
-                        val id = try { JSONObject(respBody ?: "{}").optString("id", "") } catch (_: Exception) { "" }
-                        callback(id.ifEmpty { null })
-                    } else if (response.code == 202) {
-                        offset = end
-                        uploadNext()
-                    } else callback(null)
-                }
-            })
+            var retryCount = 0
+            val maxRetries = 3
+            fun attemptChunk() {
+                val req = Request.Builder()
+                    .url(uploadUrl)
+                    .header("Content-Length", chunk.size.toString())
+                    .header("Content-Range", "bytes $offset-${end - 1}/$total")
+                    .put(chunk.toRequestBody("application/octet-stream".toMediaType()))
+                    .build()
+                client.newCall(req).enqueue(object : Callback {
+                    override fun onFailure(call: Call, e: IOException) {
+                        retryCount++
+                        logToFile("[OD] chunk onFailure ($retryCount/$maxRetries): ${e.message}")
+                        if (retryCount < maxRetries) {
+                            Thread.sleep(2000L * retryCount)
+                            attemptChunk()
+                        } else { callback(null) }
+                    }
+                    override fun onResponse(call: Call, response: Response) {
+                        val respBody = response.body?.string()
+                        if (response.code in listOf(200, 201)) {
+                            val id = try { JSONObject(respBody ?: "{}").optString("id", "") } catch (_: Exception) { "" }
+                            callback(id.ifEmpty { null })
+                        } else if (response.code == 202) {
+                            offset = end
+                            uploadNext()
+                        } else if (response.code in 500..599 && retryCount < maxRetries) {
+                            retryCount++
+                            logToFile("[OD] chunk server error ${response.code} ($retryCount/$maxRetries)")
+                            Thread.sleep(2000L * retryCount)
+                            attemptChunk()
+                        } else {
+                            logToFile("[OD] chunk failed code=${response.code}")
+                            callback(null)
+                        }
+                    }
+                })
+            }
+            attemptChunk()
         }
         uploadNext()
     }
