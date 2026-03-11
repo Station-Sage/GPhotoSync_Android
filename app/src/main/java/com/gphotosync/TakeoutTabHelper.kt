@@ -307,13 +307,18 @@ class TakeoutTabHelper(
 
     fun onZipSelected(uri: Uri) {
         selectedZipUri = uri
-        val prevUri = activity.getSharedPreferences("takeout_session", AppCompatActivity.MODE_PRIVATE)
-            .getString("zip_uri", null)
-        activity.getSharedPreferences("takeout_session", AppCompatActivity.MODE_PRIVATE).edit()
-            .putString("zip_uri", uri.toString()).apply()
+        // 파일명으로 비교 (URI는 같은 파일도 매번 달라질 수 있음)
+        val fileName = try {
+            activity.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                if (c.moveToFirst()) c.getString(0) else null
+            }
+        } catch (_: Exception) { null } ?: uri.lastPathSegment ?: uri.toString()
+        val prefs = activity.getSharedPreferences("takeout_session", AppCompatActivity.MODE_PRIVATE)
+        val prevName = prefs.getString("zip_name", null)
+        prefs.edit().putString("zip_uri", uri.toString()).putString("zip_name", fileName).apply()
 
         // 다른 ZIP 파일이면 이전 업로드 기록 초기화
-        if (prevUri != null && prevUri != uri.toString()) {
+        if (prevName != null && prevName != fileName) {
             activity.getSharedPreferences("takeout_progress", AppCompatActivity.MODE_PRIVATE).edit().clear().apply()
             activity.getSharedPreferences("takeout_media_list", AppCompatActivity.MODE_PRIVATE).edit().clear().apply()
             activity.getSharedPreferences("takeout_analyze", AppCompatActivity.MODE_PRIVATE).edit().clear().apply()
