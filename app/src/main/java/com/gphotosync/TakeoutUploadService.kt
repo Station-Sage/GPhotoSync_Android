@@ -62,12 +62,13 @@ class TakeoutUploadService : Service() {
         @Volatile var isRunning: Boolean = false
         @Volatile var currentProgress: TakeoutProgress? = null
         @Volatile var uploadStartTime: Long = 0L   // (total, moved, errors)
+        @Volatile var actualUploadStartTime: Long = 0L
     }
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var job: Job? = null
     private val jsonDateMap = java.util.concurrent.ConcurrentHashMap<String, String>()
-    private val folderMutex = Mutex()
+    private val folderLocks = java.util.concurrent.ConcurrentHashMap<String, Mutex>()
     private val createdFolders = mutableSetOf<String>()
 
     // === OkHttp 콜백 → suspend 변환 ===
@@ -747,6 +748,7 @@ class TakeoutUploadService : Service() {
                     liveLog("⚠ 폴더 캐싱 실패 (계속 진행): ${e.message}")
                 }
 
+                actualUploadStartTime = 0L
                 uploadStartTime = System.currentTimeMillis()
                 liveLog("미디어 ${total}개. 업로드 시작...")
                 notifyProgress("업로드 시작 (${total}개)", 0, total)
@@ -895,9 +897,11 @@ class TakeoutUploadService : Service() {
                                 val pathInfo = item.fp.substringAfter(api.rootFolder + "/")
                                 liveLog("[W$workerId] ${item.fn} ($pathInfo)")
 
-                                val folderOk = folderMutex.withLock {
-                                    if (item.fp in createdFolders) true
-                                    else {
+                                val folderOk = run {
+                                    if (item.fp in createdFolders) return@run true
+                                    val lock = folderLocks.getOrPut(item.fp) { Mutex() }
+                                    lock.withLock {
+                                        if (item.fp in createdFolders) return@withLock true
                                         val ok = ensureFolderSuspend(api, item.fp)
                                         if (ok) {
                                             val parts = item.fp.split("/")
@@ -908,8 +912,6 @@ class TakeoutUploadService : Service() {
                                         ok
                                     }
                                 }
-
-                                var driveItemId: String? = null
                                 if (folderOk) {
                                     val uploadData = if (item.tmpFile != null && item.tmpFile.exists()) item.tmpFile.readBytes() else item.data
                                     for (attempt in 1..3) {
@@ -925,6 +927,7 @@ class TakeoutUploadService : Service() {
                                 if (driveItemId != null) {
                                     val d = aDone.incrementAndGet()
                                     aDoneBytes.addAndGet(item.fileSize)
+                                    if (actualUploadStartTime == 0L) actualUploadStartTime = System.currentTimeMillis()
                                     synchronized(lock) {
                                         uploaded.add(item.zipName)
                                         addUploadedFile(item.zipName)
@@ -932,7 +935,7 @@ class TakeoutUploadService : Service() {
                                     saveDriveItemId(item.zipName, driveItemId)
                                     val pct = if (total > 0) d * 100 / total else 0
                                     val sizeKB = String.format("%.1f", item.fileSize / 1024.0)
-                                    val elapsedSec = (System.currentTimeMillis() - uploadStartTime) / 1000.0
+                                    val elapsedSec = if (actualUploadStartTime > 0) (System.currentTimeMillis() - actualUploadStartTime) / 1000.0 else 0.0
                                     val avgSpeed = if (elapsedSec > 0) String.format("%.1f", aDoneBytes.get() / 1048576.0 / elapsedSec) else "?"
                                     liveLog("✅ ${item.fn} (${sizeKB}KB)")
                                     notifyProgress("업로드 $pct% (${avgSpeed}MB/s) - ${item.fn}", d, total)
@@ -962,7 +965,8 @@ class TakeoutUploadService : Service() {
                 val ok = done - errors - skipped
                 val elapsed = (System.currentTimeMillis() - uploadStartTime) / 1000
                 val minutes = elapsed / 60; val seconds = elapsed % 60
-                val speedMBs = if (elapsed > 0) String.format("%.1f", doneBytes / 1048576.0 / elapsed) else "N/A"
+                val actualElapsed = if (actualUploadStartTime > 0) (System.currentTimeMillis() - actualUploadStartTime) / 1000.0 else elapsed.toDouble()
+                val speedMBs = if (actualElapsed > 0) String.format("%.1f", doneBytes / 1048576.0 / actualElapsed) else "N/A"
                 val doneMBFinal = String.format("%.1f", doneBytes / 1048576.0)
                 val msg = "완료! 성공:$ok 스킵:$skipped 실패:$errors (전체:$total) | ${doneMBFinal}MB ${minutes}분${seconds}초 ${speedMBs}MB/s"
                 liveLog(msg)
