@@ -201,6 +201,8 @@ class TakeoutTabHelper(
         if (selectedZipUri != null) {
             takeoutView.findViewById<ProgressBar>(R.id.takeoutProgressBar).visibility = View.GONE
             takeoutView.findViewById<TextView>(R.id.tvTakeoutStatus).text = lastTakeoutStatusText
+            takeoutView.findViewById<Button>(R.id.btnStartTakeout).visibility = View.VISIBLE
+            takeoutView.findViewById<Button>(R.id.btnStartTakeout).isEnabled = true
             val hasResumable = activity.getSharedPreferences("takeout_progress", 0)
                 .getStringSet("uf", emptySet())?.isNotEmpty() == true
             if (hasResumable) takeoutView.findViewById<Button>(R.id.btnResumeTakeout).visibility = View.VISIBLE
