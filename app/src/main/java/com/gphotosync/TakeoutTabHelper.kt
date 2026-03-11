@@ -56,6 +56,10 @@ class TakeoutTabHelper(
         TakeoutUploadService.logCallback = { line ->
             activity.runOnUiThread { appendTakeoutLog(line) }
         }
+        // Activity 복귀 시 이전 로그 복원
+        synchronized(TakeoutUploadService.logBuffer) {
+            TakeoutUploadService.logBuffer.forEach { line -> activity.runOnUiThread { appendTakeoutLog(line) } }
+        }
     }
 
     fun restorePreviousSession() {

@@ -52,6 +52,8 @@ class TakeoutUploadService : Service() {
 
         var progressCallback: ((TakeoutProgress) -> Unit)? = null
         var logCallback: ((String) -> Unit)? = null
+        val logBuffer = mutableListOf<String>()
+        private const val LOG_BUFFER_MAX = 200
         var analyzeCallback: ((Int, Long, Int) -> Unit)? = null
         var organizeCallback: ((Int, Int, Int) -> Unit)? = null  // (total, copied, errors)
         var migrateCallback: ((Int, Int, Int) -> Unit)? = null
@@ -284,6 +286,8 @@ class TakeoutUploadService : Service() {
     private fun liveLog(msg: String) {
         val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
         try { getLogWriter()?.apply { write("$ts $msg"); newLine(); flush() } } catch (_: Exception) {}
+        val entry = "[$ts] $msg"
+        synchronized(logBuffer) { logBuffer.add(entry); if (logBuffer.size > LOG_BUFFER_MAX) logBuffer.removeAt(0) }
         android.os.Handler(android.os.Looper.getMainLooper()).post { logCallback?.invoke("[$ts] $msg") }
     }
 
@@ -694,6 +698,25 @@ class TakeoutUploadService : Service() {
                 }
 
                 isRunning = true
+                // MS 토큰 유효성 검사 + 자동 갱신
+                liveLog("🔑 MS 인증 확인 중...")
+                val tokenOk = suspendCoroutine<Boolean> { cont ->
+                    com.gphotosync.TokenManager.getValidMicrosoftToken(okhttp3.OkHttpClient()) { token ->
+                        if (token != null) {
+                            liveLog("✅ MS 인증 유효 (토큰: ${token.take(10)}...)")
+                            cont.resume(true)
+                        } else {
+                            liveLog("❌ MS 인증 만료 - 인증 탭에서 재로그인 필요")
+                            cont.resume(false)
+                        }
+                    }
+                }
+                if (!tokenOk) {
+                    liveLog("⛔ 업로드 중단: MS 인증이 만료되었습니다. 인증 탭에서 Microsoft 재로그인 후 다시 시도하세요.")
+                    notifyProgress("❌ MS 인증 만료 - 재로그인 필요", 0, 0)
+                    isRunning = false
+                    return@launch
+                }
                 // 루트 폴더 미리 생성 (Pictures/GooglePhotos)
                 val rootOk = ensureFolderSuspend(api, api.rootFolder)
                 if (!rootOk) {
