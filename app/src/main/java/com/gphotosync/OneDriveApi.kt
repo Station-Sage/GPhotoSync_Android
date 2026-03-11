@@ -23,7 +23,7 @@ class OneDriveApi(private val context: Context) {
         } catch (_: Exception) {}
     }
 
-    private val client = OkHttpClient.Builder()
+    val client = OkHttpClient.Builder()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(300, TimeUnit.SECONDS)
         .writeTimeout(120, TimeUnit.SECONDS)

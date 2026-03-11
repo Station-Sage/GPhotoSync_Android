@@ -702,7 +702,7 @@ class TakeoutUploadService : Service() {
                 // MS 토큰 유효성 검사 + 자동 갱신
                 liveLog("🔑 MS 인증 확인 중...")
                 val tokenOk = suspendCoroutine<Boolean> { cont ->
-                    com.gphotosync.TokenManager.getValidMicrosoftToken(okhttp3.OkHttpClient()) { token ->
+                    com.gphotosync.TokenManager.getValidMicrosoftToken(api.client) { token ->
                         if (token != null) {
                             liveLog("✅ MS 인증 유효 (토큰: ${token.take(10)}...)")
                             cont.resume(true)

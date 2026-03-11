@@ -57,6 +57,8 @@ class TakeoutTabHelper(
             activity.runOnUiThread { appendTakeoutLog(line) }
         }
         // Activity 복귀 시 이전 로그 복원
+        takeoutLogLines.clear()
+        takeoutView.findViewById<TextView>(R.id.tvTakeoutLog).text = ""
         synchronized(TakeoutUploadService.logBuffer) {
             TakeoutUploadService.logBuffer.forEach { line -> activity.runOnUiThread { appendTakeoutLog(line) } }
         }
