@@ -275,7 +275,7 @@ class TakeoutUploadService : Service() {
             try {
                 val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "sync_log.txt")
                 logWriter = java.io.BufferedWriter(java.io.FileWriter(f, true), 8192)
-            } catch (_: Exception) {}
+            } catch (e: Exception) { android.util.Log.e("TakeoutUpload", "logWriter init fail: ${e.message}") }
         }
         return logWriter
     }
@@ -1015,7 +1015,7 @@ class TakeoutUploadService : Service() {
         }
     }
 
-    override fun onDestroy() { super.onDestroy(); try { logWriter?.close() } catch (_: Exception) {}; job?.cancel(); scope.cancel() }
+    override fun onDestroy() { android.util.Log.w("TakeoutUpload", "onDestroy called - service killed"); super.onDestroy(); try { logWriter?.close() } catch (_: Exception) {}; job?.cancel(); scope.cancel() }
 }
 
 data class TakeoutProgress(
