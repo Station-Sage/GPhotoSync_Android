@@ -21,23 +21,19 @@
 |------|------|
 | activity_main.xml | 4탭 메인 |
 | activity_oauth.xml | OAuth WebView |
-| tab_takeout.xml | Takeout 탭 (버튼, 프로그레스, 로그) |
+| tab_takeout.xml | Takeout 탭 |
 | tab_sync.xml | 동기화 탭 |
 | tab_auth.xml | 인증 탭 |
 | tab_info.xml | 정보/설정 탭 |
 
-## 빌드/CI
-| 파일 | 설명 |
-|------|------|
-| .github/workflows/build.yml | GitHub Actions 빌드 |
-| app/build.gradle.kts | 앱 빌드 설정 |
-
 ## AI 컨텍스트 (.ai/)
 | 파일 | 용도 |
 |------|------|
-| PROJECT.md | 개발환경, 워크플로우 |
+| PROJECT.md | 개발환경, 워크플로우, AI 규칙 |
+| SCRIPTS.md | 스크립트 사용법, 작업 흐름 |
 | ARCHITECTURE.md | 파이프라인, 동시성, 상수 |
 | FILE_INDEX.md | 파일 목록 + 수정빈도 |
 | CURRENT_TASK.md | 현재 작업 상태 |
 | BUGS.md | 버그 트래커 |
 | DECISIONS.md | 설계 결정 기록 |
+| PROMPT_TEMPLATE.md | 새 채팅 시작 프롬프트 |
