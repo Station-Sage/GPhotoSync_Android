@@ -192,7 +192,7 @@ class MainActivity : AppCompatActivity() {
         layout.addView(etClientId); layout.addView(etSecret)
         val rg = RadioGroup(this)
         val rbManual = RadioButton(this).apply { text = "직접 입력"; isChecked = true }
-        val rbJson = RadioButton(this).apply { text = "JSON 파일에서 가져오기"; setOnClickListener { jsonFilePicker.launch("*/*") } }
+        val rbJson = RadioButton(this).apply { text = "JSON 파일에서 가져오기"; setOnClickListener { rbManual.isChecked = true; jsonFilePicker.launch("*/*") } }
         rg.addView(rbManual); rg.addView(rbJson); layout.addView(rg)
         AlertDialog.Builder(this).setTitle("Google API 설정").setView(layout)
             .setPositiveButton("저장") { _, _ ->
@@ -224,7 +224,7 @@ class MainActivity : AppCompatActivity() {
         layout.addView(etClientId); layout.addView(etSecret)
         val rg = RadioGroup(this)
         val rbManual = RadioButton(this).apply { text = "직접 입력"; isChecked = true }
-        val rbJson = RadioButton(this).apply { text = "JSON 파일에서 가져오기"; setOnClickListener { msJsonPicker.launch("*/*") } }
+        val rbJson = RadioButton(this).apply { text = "JSON 파일에서 가져오기"; setOnClickListener { rbManual.isChecked = true; msJsonPicker.launch("*/*") } }
         rg.addView(rbManual); rg.addView(rbJson); layout.addView(rg)
         layout.addView(TextView(this).apply {
             text = "Azure Portal → 앱 등록에서:\n• 리디렉션 URI: http://localhost\n• API 권한: Files.ReadWrite, offline_access"

@@ -52,9 +52,12 @@ class TakeoutUploadService : Service() {
 
         var progressCallback: ((TakeoutProgress) -> Unit)? = null
         var logCallback: ((String) -> Unit)? = null
+        val logBuffer = mutableListOf<String>()
+        private const val LOG_BUFFER_MAX = 200
         var analyzeCallback: ((Int, Long, Int) -> Unit)? = null
         var organizeCallback: ((Int, Int, Int) -> Unit)? = null  // (total, copied, errors)
         var migrateCallback: ((Int, Int, Int) -> Unit)? = null
+        var authExpiredCallback: (() -> Unit)? = null
         var skipOneDriveCheck: Boolean = false
         @Volatile var isRunning: Boolean = false
         @Volatile var currentProgress: TakeoutProgress? = null
@@ -70,9 +73,7 @@ class TakeoutUploadService : Service() {
     // === OkHttp 콜백 → suspend 변환 ===
     private suspend fun ensureFolderSuspend(api: OneDriveApi, path: String): Boolean {
         for (attempt in 1..3) {
-            liveLog("[DEBUG] 폴더 생성 시도 $attempt/3: $path")
             val ok = suspendCoroutine<Boolean> { cont -> api.ensureFolder(path) { cont.resume(it) } }
-            liveLog("[DEBUG] 폴더 생성 결과 $attempt/3: $path -> $ok")
             if (ok) return true
             if (attempt < 3) {
                 liveLog("⚠ 폴더 생성 재시도 $attempt/3: $path")
@@ -277,7 +278,7 @@ class TakeoutUploadService : Service() {
             try {
                 val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "sync_log.txt")
                 logWriter = java.io.BufferedWriter(java.io.FileWriter(f, true), 8192)
-            } catch (_: Exception) {}
+            } catch (e: Exception) { android.util.Log.e("TakeoutUpload", "logWriter init fail: ${e.message}") }
         }
         return logWriter
     }
@@ -286,6 +287,8 @@ class TakeoutUploadService : Service() {
     private fun liveLog(msg: String) {
         val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
         try { getLogWriter()?.apply { write("$ts $msg"); newLine(); flush() } } catch (_: Exception) {}
+        val entry = "[$ts] $msg"
+        synchronized(logBuffer) { logBuffer.add(entry); if (logBuffer.size > LOG_BUFFER_MAX) logBuffer.removeAt(0) }
         android.os.Handler(android.os.Looper.getMainLooper()).post { logCallback?.invoke("[$ts] $msg") }
     }
 
@@ -696,6 +699,26 @@ class TakeoutUploadService : Service() {
                 }
 
                 isRunning = true
+                // MS 토큰 유효성 검사 + 자동 갱신
+                liveLog("🔑 MS 인증 확인 중...")
+                val tokenOk = suspendCoroutine<Boolean> { cont ->
+                    com.gphotosync.TokenManager.getValidMicrosoftToken(okhttp3.OkHttpClient()) { token ->
+                        if (token != null) {
+                            liveLog("✅ MS 인증 유효 (토큰: ${token.take(10)}...)")
+                            cont.resume(true)
+                        } else {
+                            liveLog("❌ MS 인증 만료 - 인증 탭에서 재로그인 필요")
+                            cont.resume(false)
+                        }
+                    }
+                }
+                if (!tokenOk) {
+                    liveLog("⛔ 업로드 중단: MS 인증이 만료되었습니다. 인증 탭에서 Microsoft 재로그인 후 다시 시도하세요.")
+                    notifyProgress("❌ MS 인증 만료 - 재로그인 필요", 0, 0)
+                    android.os.Handler(android.os.Looper.getMainLooper()).post { authExpiredCallback?.invoke() }
+                    isRunning = false
+                    return@launch
+                }
                 // 루트 폴더 미리 생성 (Pictures/GooglePhotos)
                 val rootOk = ensureFolderSuspend(api, api.rootFolder)
                 if (!rootOk) {
@@ -1017,7 +1040,7 @@ class TakeoutUploadService : Service() {
         }
     }
 
-    override fun onDestroy() { super.onDestroy(); try { logWriter?.close() } catch (_: Exception) {}; job?.cancel(); scope.cancel() }
+    override fun onDestroy() { android.util.Log.w("TakeoutUpload", "onDestroy called - service killed"); super.onDestroy(); try { logWriter?.close() } catch (_: Exception) {}; job?.cancel(); scope.cancel() }
 }
 
 data class TakeoutProgress(

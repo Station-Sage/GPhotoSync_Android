@@ -750,6 +750,7 @@ class TakeoutUploadService : Service() {
                 uploadStartTime = System.currentTimeMillis()
                 liveLog("미디어 ${total}개. 업로드 시작...")
                 notifyProgress("업로드 시작 (${total}개)", 0, total)
+                currentProgress = TakeoutProgress(0, total, 0, false, null, 0, 0)
                 progressCallback?.invoke(TakeoutProgress(0, total, 0, false, null))
 
                 val uploaded: MutableSet<String>

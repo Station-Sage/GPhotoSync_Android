@@ -140,11 +140,6 @@ class TakeoutTabHelper(
             takeoutView.findViewById<Button>(R.id.btnStopTakeout).visibility = View.VISIBLE
             takeoutView.findViewById<Button>(R.id.btnStartTakeout).isEnabled = false
         }
-            takeoutView.findViewById<Button>(R.id.btnStartTakeout).visibility = View.GONE
-            takeoutView.findViewById<Button>(R.id.btnResumeTakeout)?.visibility = View.GONE
-            takeoutView.findViewById<Button>(R.id.btnOrganizeAlbums)?.visibility = View.GONE
-            takeoutView.findViewById<Button>(R.id.btnMigrateFolder)?.visibility = View.GONE
-            takeoutView.findViewById<Button>(R.id.btnReanalyze)?.visibility = View.GONE
 
         if (takeoutLogLines.isNotEmpty()) {
             takeoutView.findViewById<TextView>(R.id.tvTakeoutLog).text = takeoutLogLines.joinToString("\n")
