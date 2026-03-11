@@ -159,38 +159,10 @@ class TakeoutTabHelper(
             // === 업로드 중 ===
             isTakeoutUploading = true
             setupCallbacks()
-            val p = TakeoutUploadService.currentProgress ?: lastTakeoutProgress
-            val pb = takeoutView.findViewById<ProgressBar>(R.id.takeoutProgressBar)
-            pb.visibility = View.VISIBLE
-            if (p != null && p.total > 0) {
-                pb.isIndeterminate = false; pb.max = p.total; pb.progress = p.done
-                val pct = p.done * 100 / p.total
-                val doneMB = String.format("%.1f", p.doneBytes / 1024.0 / 1024.0)
-                takeoutView.findViewById<TextView>(R.id.tvTakeoutProgress).visibility = View.VISIBLE
-                takeoutView.findViewById<TextView>(R.id.tvTakeoutProgress).text = "${p.done}/${p.total} ($pct%) | ${doneMB}MB"
-            }
-            takeoutView.findViewById<TextView>(R.id.tvTakeoutStatus).visibility = View.VISIBLE
-            takeoutView.findViewById<TextView>(R.id.tvTakeoutStatus).text = "업로드 중..."
-            takeoutView.findViewById<Button>(R.id.btnStopTakeout).visibility = View.VISIBLE
-            takeoutView.findViewById<Button>(R.id.btnStartTakeout).visibility = View.GONE
-            takeoutView.findViewById<Button>(R.id.btnResumeTakeout)?.visibility = View.GONE
-            takeoutView.findViewById<Button>(R.id.btnOrganizeAlbums)?.visibility = View.GONE
-            takeoutView.findViewById<Button>(R.id.btnMigrateFolder)?.visibility = View.GONE
-            takeoutView.findViewById<Button>(R.id.btnReanalyze)?.visibility = View.GONE
+            applyUploadingUI(TakeoutUploadService.currentProgress ?: lastTakeoutProgress)
         } else if (selectedZipUri != null) {
             // === 대기 중 (ZIP 선택됨) ===
-            takeoutView.findViewById<ProgressBar>(R.id.takeoutProgressBar).visibility = View.GONE
-            takeoutView.findViewById<TextView>(R.id.tvTakeoutStatus).text = lastTakeoutStatusText
-            takeoutView.findViewById<Button>(R.id.btnStartTakeout).visibility = View.VISIBLE
-            takeoutView.findViewById<Button>(R.id.btnStartTakeout).isEnabled = true
-            takeoutView.findViewById<Button>(R.id.btnStopTakeout).visibility = View.GONE
-            val hasResumable = activity.getSharedPreferences("takeout_progress", 0)
-                .getStringSet("uf", emptySet())?.isNotEmpty() == true
-            takeoutView.findViewById<Button>(R.id.btnResumeTakeout)?.visibility = if (hasResumable) View.VISIBLE else View.GONE
-            val albumCount = activity.getSharedPreferences("takeout_album_map", AppCompatActivity.MODE_PRIVATE).getInt("c", 0)
-            takeoutView.findViewById<Button>(R.id.btnOrganizeAlbums)?.visibility = if (albumCount > 0 && hasResumable) View.VISIBLE else View.GONE
-            takeoutView.findViewById<Button>(R.id.btnMigrateFolder)?.visibility = if (hasResumable) View.VISIBLE else View.GONE
-            takeoutView.findViewById<Button>(R.id.btnReanalyze)?.visibility = View.VISIBLE
+            applyIdleUI()
         }
     }
 
@@ -462,48 +434,13 @@ class TakeoutTabHelper(
 
     private fun updateTakeoutProgress(progress: TakeoutProgress) {
         lastTakeoutProgress = progress
-        val pb = takeoutView.findViewById<ProgressBar>(R.id.takeoutProgressBar)
-        val tvProgress = takeoutView.findViewById<TextView>(R.id.tvTakeoutProgress)
-        val tvStatus = takeoutView.findViewById<TextView>(R.id.tvTakeoutStatus)
-
-        if (progress.total > 0) {
-            pb.isIndeterminate = false; pb.max = progress.total; pb.progress = progress.done
-            val pct = progress.done * 100 / progress.total
-            val doneMB = String.format("%.1f", progress.doneBytes / 1024.0 / 1024.0)
-            val elapsed = (System.currentTimeMillis() - TakeoutUploadService.uploadStartTime) / 1000.0
-            val speedText = if (elapsed > 1 && progress.doneBytes > 0) {
-                val speed = progress.doneBytes / 1048576.0 / elapsed
-                String.format("%.1fMB/s", speed)
-            } else ""
-            val skipText = if (progress.skipped > 0) " 스킵:${progress.skipped}" else ""
-            tvProgress.text = "${progress.done}/${progress.total} ($pct%) | ${doneMB}MB $speedText$skipText"
-        }
-
         if (progress.finished) {
             isTakeoutUploading = false
-            takeoutView.findViewById<Button>(R.id.btnStopTakeout).visibility = View.GONE
-            takeoutView.findViewById<Button>(R.id.btnStartTakeout).isEnabled = true
-            takeoutView.findViewById<Button>(R.id.btnStartTakeout).visibility = View.VISIBLE
-            takeoutView.findViewById<Button>(R.id.btnStartTakeout).text = "🚀 OneDrive에 업로드"
-            val hasResumable = activity.getSharedPreferences("takeout_progress", AppCompatActivity.MODE_PRIVATE)
-                .getStringSet("uf", emptySet())?.isNotEmpty() == true
-            takeoutView.findViewById<Button>(R.id.btnResumeTakeout).visibility =
-                if (hasResumable && progress.errorMessage?.contains("중단") == true) View.VISIBLE else View.GONE
-            val success = progress.done - progress.errors - progress.skipped
-            if (progress.errorMessage != null) {
-                val s = "오류: ${progress.errorMessage}"; tvStatus.text = s; lastTakeoutStatusText = s
-            } else {
-                val s = "완료! 성공:${success} 스킵:${progress.skipped} 실패:${progress.errors}"; tvStatus.text = s; lastTakeoutStatusText = s
-            }
-            // 앨범 정리 버튼 표시
-            val albumCount = activity.getSharedPreferences("takeout_album_map", AppCompatActivity.MODE_PRIVATE).getInt("c", 0)
-            if (albumCount > 0) {
-                takeoutView.findViewById<Button>(R.id.btnOrganizeAlbums)?.visibility = View.VISIBLE
-            }
-            takeoutView.findViewById<Button>(R.id.btnMigrateFolder)?.visibility = View.VISIBLE
-        } else { tvStatus.text = "업로드 중..." }
+            applyFinishedUI(progress)
+        } else {
+            applyUploadingUI(progress)
+        }
     }
-
     private fun showDatePicker(isStart: Boolean) {
         val cal = Calendar.getInstance()
         DatePickerDialog(activity, { _, year, month, day ->
@@ -515,6 +452,67 @@ class TakeoutTabHelper(
             activity.getSharedPreferences("takeout_media_list", AppCompatActivity.MODE_PRIVATE).edit().clear().apply()
             selectedZipUri?.let { onZipSelected(it) }
         }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
+    }
+
+    private fun applyUploadingUI(p: TakeoutProgress?) {
+        val pb = takeoutView.findViewById<ProgressBar>(R.id.takeoutProgressBar)
+        pb.visibility = View.VISIBLE
+        if (p != null && p.total > 0) {
+            pb.isIndeterminate = false; pb.max = p.total; pb.progress = p.done
+            val pct = p.done * 100 / p.total
+            val doneMB = String.format("%.1f", p.doneBytes / 1024.0 / 1024.0)
+            val elapsed = (System.currentTimeMillis() - TakeoutUploadService.uploadStartTime) / 1000.0
+            val speedText = if (elapsed > 1 && p.doneBytes > 0) String.format(" %.1fMB/s", p.doneBytes / 1048576.0 / elapsed) else ""
+            val skipText = if (p.skipped > 0) " 스킵:${p.skipped}" else ""
+            takeoutView.findViewById<TextView>(R.id.tvTakeoutProgress).visibility = View.VISIBLE
+            takeoutView.findViewById<TextView>(R.id.tvTakeoutProgress).text = "${p.done}/${p.total} ($pct%) | ${doneMB}MB$speedText$skipText"
+        }
+        takeoutView.findViewById<TextView>(R.id.tvTakeoutStatus).visibility = View.VISIBLE
+        takeoutView.findViewById<TextView>(R.id.tvTakeoutStatus).text = "업로드 중..."
+        takeoutView.findViewById<Button>(R.id.btnStopTakeout).visibility = View.VISIBLE
+        takeoutView.findViewById<Button>(R.id.btnStartTakeout).visibility = View.GONE
+        takeoutView.findViewById<Button>(R.id.btnResumeTakeout)?.visibility = View.GONE
+        takeoutView.findViewById<Button>(R.id.btnOrganizeAlbums)?.visibility = View.GONE
+        takeoutView.findViewById<Button>(R.id.btnMigrateFolder)?.visibility = View.GONE
+        takeoutView.findViewById<Button>(R.id.btnReanalyze)?.visibility = View.GONE
+    }
+
+    private fun applyFinishedUI(progress: TakeoutProgress) {
+        takeoutView.findViewById<ProgressBar>(R.id.takeoutProgressBar).visibility = View.GONE
+        takeoutView.findViewById<Button>(R.id.btnStopTakeout).visibility = View.GONE
+        takeoutView.findViewById<Button>(R.id.btnStartTakeout).isEnabled = true
+        takeoutView.findViewById<Button>(R.id.btnStartTakeout).visibility = View.VISIBLE
+        takeoutView.findViewById<Button>(R.id.btnStartTakeout).text = "🚀 OneDrive에 업로드"
+        val hasResumable = activity.getSharedPreferences("takeout_progress", AppCompatActivity.MODE_PRIVATE)
+            .getStringSet("uf", emptySet())?.isNotEmpty() == true
+        takeoutView.findViewById<Button>(R.id.btnResumeTakeout).visibility =
+            if (hasResumable && progress.errorMessage?.contains("중단") == true) View.VISIBLE else View.GONE
+        val success = progress.done - progress.errors - progress.skipped
+        val tvStatus = takeoutView.findViewById<TextView>(R.id.tvTakeoutStatus)
+        if (progress.errorMessage != null) {
+            val s = "오류: ${progress.errorMessage}"; tvStatus.text = s; lastTakeoutStatusText = s
+        } else {
+            val s = "완료! 성공:${success} 스킵:${progress.skipped} 실패:${progress.errors}"; tvStatus.text = s; lastTakeoutStatusText = s
+        }
+        val albumCount = activity.getSharedPreferences("takeout_album_map", AppCompatActivity.MODE_PRIVATE).getInt("c", 0)
+        if (albumCount > 0) takeoutView.findViewById<Button>(R.id.btnOrganizeAlbums)?.visibility = View.VISIBLE
+        takeoutView.findViewById<Button>(R.id.btnMigrateFolder)?.visibility = View.VISIBLE
+        takeoutView.findViewById<Button>(R.id.btnReanalyze)?.visibility = View.VISIBLE
+    }
+
+    private fun applyIdleUI() {
+        takeoutView.findViewById<ProgressBar>(R.id.takeoutProgressBar).visibility = View.GONE
+        takeoutView.findViewById<TextView>(R.id.tvTakeoutStatus).text = lastTakeoutStatusText
+        takeoutView.findViewById<Button>(R.id.btnStartTakeout).visibility = View.VISIBLE
+        takeoutView.findViewById<Button>(R.id.btnStartTakeout).isEnabled = true
+        takeoutView.findViewById<Button>(R.id.btnStopTakeout).visibility = View.GONE
+        val hasResumable = activity.getSharedPreferences("takeout_progress", 0)
+            .getStringSet("uf", emptySet())?.isNotEmpty() == true
+        takeoutView.findViewById<Button>(R.id.btnResumeTakeout)?.visibility = if (hasResumable) View.VISIBLE else View.GONE
+        val albumCount = activity.getSharedPreferences("takeout_album_map", AppCompatActivity.MODE_PRIVATE).getInt("c", 0)
+        takeoutView.findViewById<Button>(R.id.btnOrganizeAlbums)?.visibility = if (albumCount > 0 && hasResumable) View.VISIBLE else View.GONE
+        takeoutView.findViewById<Button>(R.id.btnMigrateFolder)?.visibility = if (hasResumable) View.VISIBLE else View.GONE
+        takeoutView.findViewById<Button>(R.id.btnReanalyze)?.visibility = View.VISIBLE
     }
 
     fun appendTakeoutLog(line: String) {

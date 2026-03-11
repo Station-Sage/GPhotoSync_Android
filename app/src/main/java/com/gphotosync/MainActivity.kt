@@ -110,6 +110,7 @@ class MainActivity : AppCompatActivity() {
 
         tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab) {
+                getSharedPreferences("app_settings", MODE_PRIVATE).edit().putInt("last_tab", tab.position).apply()
                 contentFrame.removeAllViews()
                 when (tab.position) {
                     0 -> { contentFrame.addView(syncView); syncHelper.loadHistorySummary() }
@@ -368,6 +369,8 @@ class MainActivity : AppCompatActivity() {
         SyncForegroundService.progressCallback = { p -> runOnUiThread { syncHelper.updateProgress(p) } }
         SyncForegroundService.logCallback = { l -> runOnUiThread { syncHelper.appendLiveLog(l) } }
         val tabLayout = findViewById<TabLayout>(R.id.tabLayout)
+        val savedTab = getSharedPreferences("app_settings", MODE_PRIVATE).getInt("last_tab", 0)
+        if (tabLayout.selectedTabPosition != savedTab) tabLayout.getTabAt(savedTab)?.select()
         if (tabLayout.selectedTabPosition == 3) takeoutHelper.restoreState()
     }
 }
