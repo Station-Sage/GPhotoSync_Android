@@ -539,6 +539,7 @@ class TakeoutTabHelper(
         tv.text = takeoutLogLines.joinToString("\n")
         val sv = takeoutView.findViewById<ScrollView>(R.id.scrollTakeoutLog)
         sv.post { sv.fullScroll(View.FOCUS_DOWN) }
+    }
     // Worker별 마지막 줄 교체
     private val workerLineIndex = mutableMapOf<Int, Int>() // workerId → takeoutLogLines index
     fun updateTakeoutLog(workerId: Int, line: String) {
@@ -557,6 +558,5 @@ class TakeoutTabHelper(
         tv.text = takeoutLogLines.joinToString("\n")
         val sv = takeoutView.findViewById<ScrollView>(R.id.scrollTakeoutLog)
         sv.post { sv.fullScroll(View.FOCUS_DOWN) }
-    }
     }
 }
