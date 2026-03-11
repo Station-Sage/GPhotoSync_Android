@@ -57,6 +57,7 @@ class TakeoutUploadService : Service() {
         var analyzeCallback: ((Int, Long, Int) -> Unit)? = null
         var organizeCallback: ((Int, Int, Int) -> Unit)? = null  // (total, copied, errors)
         var migrateCallback: ((Int, Int, Int) -> Unit)? = null
+        var authExpiredCallback: (() -> Unit)? = null
         var skipOneDriveCheck: Boolean = false
         @Volatile var isRunning: Boolean = false
         @Volatile var currentProgress: TakeoutProgress? = null
@@ -714,6 +715,7 @@ class TakeoutUploadService : Service() {
                 if (!tokenOk) {
                     liveLog("⛔ 업로드 중단: MS 인증이 만료되었습니다. 인증 탭에서 Microsoft 재로그인 후 다시 시도하세요.")
                     notifyProgress("❌ MS 인증 만료 - 재로그인 필요", 0, 0)
+                    android.os.Handler(android.os.Looper.getMainLooper()).post { authExpiredCallback?.invoke() }
                     isRunning = false
                     return@launch
                 }

@@ -60,6 +60,17 @@ class TakeoutTabHelper(
         synchronized(TakeoutUploadService.logBuffer) {
             TakeoutUploadService.logBuffer.forEach { line -> activity.runOnUiThread { appendTakeoutLog(line) } }
         }
+        TakeoutUploadService.authExpiredCallback = {
+            activity.runOnUiThread {
+                androidx.appcompat.app.AlertDialog.Builder(activity)
+                    .setTitle("⚠ MS 인증 만료")
+                    .setMessage("Microsoft 인증이 만료되었습니다.\n인증 탭에서 재로그인 후 다시 시도하세요.")
+                    .setPositiveButton("인증 탭으로 이동") { _, _ ->
+                        activity.findViewById<com.google.android.material.tabs.TabLayout>(R.id.tabLayout)?.getTabAt(1)?.select()
+                    }
+                    .setNegativeButton("닫기", null)
+                    .show()
+            }
     }
 
     fun restorePreviousSession() {
