@@ -1,22 +1,25 @@
 # 설계 결정
 
-## D1: uploaded + checkFileExistsSuspend 통합
-새 업로드/이어하기 동일 로직. uploaded에 있으면 OneDrive 확인 -> 있으면 스킵, 없으면 재업로드.
+## D1: checkFileExistsSuspend 통합 (B안 선택)
+새 업로드/이어하기 로직 통일. Producer에서 순차 호출하므로 속도 병목 있음 (P2)
 
-## D2: yearOnly 연도만 반환
-jsonDateMap 이전 데이터 "연도/월" -> substringBefore("/")로 연도만 추출.
+## D2: conflictBehavior: fail + 409 허용
+폴더 생성 시 이미 존재하면 409 반환, 정상 처리. rename 대신 fail 사용
 
-## D3: 폴더 생성 전략
-서비스 시작 시 루트 폴더 미리 생성 + listChildren으로 연도 폴더 캐싱.
-Worker에서 folderMutex로 동시 생성 방지. ensureFolderSuspend 3회 재시도.
+## D3: Mutex + 재시도 3회 폴더 생성
+3 Worker 동시 폴더 생성 경쟁 방지. 재시도 간격 2/4/6초
 
-## D4: conflictBehavior: "fail"
-createFolderChain에서 사용. 409도 성공 처리 (폴더 존재).
+## D4: EncryptedSharedPreferences 토큰 저장
+보안 우선. 앱 재설치 시 초기화되는 트레이드오프 수용
 
-## D5: START_REDELIVER_INTENT
-시스템 킬 후 마지막 Intent로 서비스 재시작. URI 없는 호출은 START_NOT_STICKY.
+## D5: WebView 인증 (브라우저 대신)
+앱 내 WebView에서 OAuth 진행. localhost 리다이렉트를 shouldOverrideUrlLoading으로 가로채기. Azure/Google 설정 변경 불필요
 
-## D6: Termux 개발 제약
-- 긴 heredoc 중단됨 -> python3 스크립트 사용
-- 로컬 빌드 불가 -> GitHub Actions 의존
-- sync_log.txt 경로: /storage/emulated/0/Download/ (Termux ~/storage/downloads와 다름)
+## D6: SAF 파일 내보내기
+FileWriter 직접 쓰기 대신 Storage Access Framework 사용. Android 스토리지 권한 문제 해결
+
+## D7: UI 상태 공통함수 분리
+applyUploadingUI/applyFinishedUI/applyIdleUI 3개 함수로 화면 상태 통일. restoreState()와 progressCallback에서 동일 함수 사용
+
+## D8: 탭 위치 저장
+SharedPreferences에 last_tab 저장. onResume에서 복원하여 다른 앱 전환 시 탭 유지

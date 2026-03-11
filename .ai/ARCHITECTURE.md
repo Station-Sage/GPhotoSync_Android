@@ -1,45 +1,35 @@
-# 아키텍처 요약
+# 아키텍처
 
 ## Takeout 업로드 파이프라인
-Producer 1개 (ZIP 읽기) -> Channel(버퍼 8) -> Worker 3개 (병렬 업로드)
+1 Producer (ZIP 스트리밍) -> Channel(buffer=8) -> 3 Workers (병렬 업로드)
 
 ### Producer
-1. ZipArchiveInputStream으로 ZIP 엔트리 순회
-2. uploaded set 확인 -> checkFileExistsSuspend로 OneDrive 존재 확인
-3. 4MB 이하: 메모리, 초과: tmpFile 생성
-4. Channel에 UploadItem 전송
+ZIP 엔트리 순회 -> 미디어 파일 필터링 -> JSON 메타데이터로 연도 추출 -> UploadItem 생성 -> Channel 전송
 
 ### Worker
-1. folderMutex -> createdFolders 캐시 확인 -> ensureFolderSuspend
-2. uploadFileSuspend (4MB 이하: simpleUpload, 초과: chunkedUpload 10MB)
-3. 실패 시 3회 재시도 (2초 간격)
-4. 성공 시 uploaded set + driveItemId 저장
+Channel에서 UploadItem 수신 -> folderMutex로 폴더 생성 (캐시 확인) -> uploadFileSuspend (4MB 이하: 단순, 초과: 10MB 청크) -> 결과 기록
 
-## 동시성
-- AtomicInteger/Long: aDone, aErrors, aSkipped, aDoneBytes
-- synchronizedSet: uploaded
-- folderMutex (Mutex): 폴더 생성 직렬화
-- synchronized(lock): createdFolders, uploaded 접근
-- ConcurrentHashMap: jsonDateMap
-- @Synchronized: liveLog, addUploadedFile, flushUploadedFiles
+### 동시성
+- AtomicInteger/Long: aDone, aDoneBytes, aErrors, aSkipped
+- synchronized: createdFolders set
+- Mutex: folderMutex (폴더 생성 경쟁 방지)
+- ConcurrentHashMap: 없음 (synchronized로 대체)
 
-## 주요 상수
-- drain 버퍼: 256KB
-- readJsonSafe: 최대 64KB, 버퍼 32KB
-- 업로드 임계값: 4MB
-- 청크 업로드: 10MB 단위
-- Channel 버퍼: 8, Worker: 3
-- OkHttp: connect 30s, read 300s, write 120s
+### 인증 흐름 (개선됨)
+앱 내 WebView에서 OAuth 로그인 -> localhost 리다이렉트 자동 가로채기 -> code 추출 -> 토큰 교환 -> EncryptedSharedPreferences 저장
+업로드 시작 전 토큰 유효성 검사 -> 만료 시 알림 다이얼로그 -> 인증탭 자동 이동
+
+### UI 상태 관리
+공통함수 3개로 통일:
+- applyUploadingUI(progress): 업로드 중 UI (프로그레스바, 중단 버튼)
+- applyFinishedUI(progress): 완료 UI (결과 표시, 앨범/마이그레이션 버튼)
+- applyIdleUI(): 대기 UI (업로드/이어하기 버튼)
+탭 위치 SharedPreferences 저장/복원
+
+### 주요 상수
+- 업로드 임계값: 4MB (초과 시 청크)
+- 청크 크기: 10MB
+- Channel 버퍼: 8
+- OkHttp 타임아웃: connect 30s, read 300s, write 120s
+- 로그 버퍼: 200개 (Activity 전환 시 복원)
 - 알림 쓰로틀: 500ms
-- 스킵 로그: 50개 단위
-
-## SharedPreferences 키
-- takeout_analyze: 분석 상태 (sc, mc, ts, jc)
-- takeout_media_list: 미디어 파일명 목록
-- takeout_json_map: 파일명 -> 연도 맵
-- takeout_progress: 업로드 완료 파일 set (키: "uf")
-- takeout_drive_ids: 파일명 -> driveItem ID
-- takeout_album_map: ZIP경로 -> 앨범명 (키: "c"=개수)
-- takeout_session: 마지막 ZIP URI
-- app_settings: 테마
-- sync_progress, sync_history: 동기화 기록

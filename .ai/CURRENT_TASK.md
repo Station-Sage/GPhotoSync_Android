@@ -1,20 +1,19 @@
 # 현재 작업
 
-## 상태: 업로드 테스트 중 (17%에서 MS 토큰 만료로 중단)
-
-## 다음 작업 (우선순위순)
-1. P0: 업로드 시작 전 MS 토큰 유효성 검사 + 자동 갱신
-2. P0: 앱 재설치 시 토큰 유실 원인 조사
-3. P0: 실시간 로그 Activity 복귀 시 복원
-4. P1: 토큰 만료 시 사용자 알림 + 인증탭 상태 업데이트
-5. P1: 중단 버튼 프로그레스바 수정
-6. P1: MS 인증 간편화 (refresh_token 자동 갱신)
-7. P2: sync_log.txt 권한 문제 해결
-8. P2: 업로드 속도 최적화
+## 상태: 업로드 테스트 진행 중 (8261개)
 
 ## 최근 완료 (2026-03-11)
-- logWriter 오류 logcat 출력 추가
-- onDestroy 로그 추가
-- .ai/ 컨텍스트 문서 + 스크립트 정리
-- DEBUG 로그 제거
-- 폴더 생성 재시도 + Mutex + 캐싱
+- WebView 인증 자동화 (브라우저+수동 코드 입력 제거)
+- MS/Google API 설정 JSON 업로드/내보내기
+- SAF 방식 인증 백업 내보내기 (퍼미션 오류 해결)
+- 업로드 전 MS 토큰 검사 + 만료 시 알림 다이얼로그 + 인증탭 이동
+- 실시간 로그 버퍼 복원 (Activity 전환 시)
+- restoreState 3상태 공통함수 분리 (applyUploadingUI/applyFinishedUI/applyIdleUI)
+- 탭 위치 저장/복원 (다른 앱 전환 시)
+- 로그 중복 복원 제거
+
+## 미해결
+- MS 토큰 만료가 잦음 (재설치마다 EncryptedSharedPreferences 초기화)
+- 중단 버튼 후 프로그레스바 계속 움직이는 문제
+- sync_log.txt 쓰기 권한 문제
+- checkFileExistsSuspend 순차 호출 속도 병목

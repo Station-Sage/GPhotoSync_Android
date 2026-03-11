@@ -1,39 +1,30 @@
 # 파일 인덱스
 
 ## Kotlin 소스 (app/src/main/java/com/gphotosync/)
-| 파일 | 줄 | 역할 | 수정빈도 |
-|------|-----|------|----------|
-| TakeoutUploadService.kt | 1026 | Takeout ZIP 분석/업로드 핵심 | 높음 |
-| OneDriveApi.kt | 525 | Microsoft Graph API | 중간 |
-| TakeoutTabHelper.kt | 518 | Takeout 탭 UI | 중간 |
-| SyncForegroundService.kt | 398 | 실시간 동기화 서비스 | 낮음 |
-| MainActivity.kt | 323 | 메인 (탭 관리) | 낮음 |
-| SyncTabHelper.kt | 241 | 동기화 탭 UI | 낮음 |
-| OAuthActivity.kt | 238 | OAuth WebView | 낮음 |
-| GooglePhotosApi.kt | 190 | Google Photos Picker API | 낮음 |
-| TokenManager.kt | 172 | 토큰 암호화 저장/갱신 | 낮음 |
-| SyncProgressStore.kt | 136 | 동기화 기록 (SharedPrefs) | 낮음 |
-| OAuthCallbackActivity.kt | 27 | OAuth 콜백 | 거의없음 |
-| GPhotoSyncApp.kt | 10 | Application 초기화 | 거의없음 |
+| 파일 | 줄수 | 역할 | 수정빈도 |
+|------|------|------|----------|
+| TakeoutUploadService.kt | ~1030 | 핵심: ZIP 분석, 업로드, 폴더 생성 | 높음 |
+| TakeoutTabHelper.kt | ~550 | Takeout 탭 UI, 상태관리, 공통함수 | 높음 |
+| OneDriveApi.kt | ~525 | MS Graph API (폴더/파일/청크/번들) | 중간 |
+| MainActivity.kt | ~340 | 탭 관리, API 설정, 인증 백업 | 중간 |
+| OAuthActivity.kt | ~210 | WebView OAuth (Google/MS) | 낮음 |
+| TokenManager.kt | ~172 | 토큰 암호화 저장, 자동 갱신 | 낮음 |
+| SyncForegroundService.kt | ~398 | 실시간 동기화 서비스 | 낮음 |
+| SyncTabHelper.kt | ~241 | 동기화 탭 UI | 낮음 |
+| GooglePhotosApi.kt | ~190 | Google Photos Picker API | 낮음 |
+| SyncProgressStore.kt | ~136 | 동기화 진행 저장 | 낮음 |
+| GPhotoSyncApp.kt | ~10 | Application 클래스 | 없음 |
+| OAuthCallbackActivity.kt | ~27 | OAuth 콜백 (미사용) | 없음 |
 
-## 레이아웃 (app/src/main/res/layout/)
-| 파일 | 설명 |
+## 레이아웃 XML
+| 파일 | 역할 |
 |------|------|
-| activity_main.xml | 4탭 메인 |
-| activity_oauth.xml | OAuth WebView |
-| tab_takeout.xml | Takeout 탭 |
+| activity_main.xml | 4탭 메인 UI |
+| activity_oauth.xml | WebView OAuth |
+| tab_takeout.xml | Takeout 탭 (버튼, 프로그레스, 로그) |
 | tab_sync.xml | 동기화 탭 |
 | tab_auth.xml | 인증 탭 |
-| tab_info.xml | 정보/설정 탭 |
+| tab_info.xml | 정보 탭 |
 
 ## AI 컨텍스트 (.ai/)
-| 파일 | 용도 |
-|------|------|
-| PROJECT.md | 개발환경, 워크플로우, AI 규칙 |
-| SCRIPTS.md | 스크립트 사용법, 작업 흐름 |
-| ARCHITECTURE.md | 파이프라인, 동시성, 상수 |
-| FILE_INDEX.md | 파일 목록 + 수정빈도 |
-| CURRENT_TASK.md | 현재 작업 상태 |
-| BUGS.md | 버그 트래커 |
-| DECISIONS.md | 설계 결정 기록 |
-| PROMPT_TEMPLATE.md | 새 채팅 시작 프롬프트 |
+PROJECT.md, ARCHITECTURE.md, FILE_INDEX.md, CURRENT_TASK.md, BUGS.md, DECISIONS.md, SCRIPTS.md, PROMPT_TEMPLATE.md
