@@ -70,6 +70,7 @@ class TakeoutUploadService : Service() {
     private val jsonDateMap = java.util.concurrent.ConcurrentHashMap<String, String>()
     private val folderLocks = java.util.concurrent.ConcurrentHashMap<String, Mutex>()
     private val createdFolders = mutableSetOf<String>()
+    private val largeFileMutex = Mutex() // 50MB 이상 파일은 1개씩만 업로드
 
     // === OkHttp 콜백 → suspend 변환 ===
     private suspend fun ensureFolderSuspend(api: OneDriveApi, path: String): Boolean {
@@ -914,17 +915,33 @@ class TakeoutUploadService : Service() {
                                 }
                                 var driveItemId: String? = null
                                 if (folderOk) {
-                                    val uploadData = if (item.tmpFile != null && item.tmpFile.exists()) item.tmpFile.readBytes() else item.data
-                                    for (attempt in 1..3) {
-                                        driveItemId = uploadFileSuspend(api, uploadData, item.fn, item.fp)
-                                        if (driveItemId != null) break
-                                        if (attempt < 3) {
-                                            liveLog("⚠ [W$workerId] ${item.fn} 업로드 실패, 재시도 $attempt/3")
-                                            kotlinx.coroutines.delay(1000L * attempt)
+                                    val isLarge = item.fileSize > 50 * 1024 * 1024
+                                    try {
+                                        if (isLarge) {
+                                            liveLog("[W$workerId] ⏳ 대용량 파일 (${item.fileSize / 1048576}MB) 순차 업로드: ${item.fn}")
+                                            largeFileMutex.lock()
                                         }
+                                        val uploadData = if (item.tmpFile != null && item.tmpFile.exists()) {
+                                            val bytes = item.tmpFile.readBytes()
+                                            item.tmpFile.delete()
+                                            bytes
+                                        } else item.data
+                                        for (attempt in 1..3) {
+                                            driveItemId = uploadFileSuspend(api, uploadData, item.fn, item.fp)
+                                            if (driveItemId != null) break
+                                            if (attempt < 3) {
+                                                liveLog("⚠ [W$workerId] ${item.fn} 업로드 실패, 재시도 $attempt/3")
+                                                kotlinx.coroutines.delay(1000L * attempt)
+                                            }
+                                        }
+                                    } catch (oom: OutOfMemoryError) {
+                                        liveLog("❌ [W$workerId] ${item.fn} 메모리 부족 (${item.fileSize / 1048576}MB)")
+                                        System.gc()
+                                    } finally {
+                                        if (isLarge) largeFileMutex.unlock()
+                                        item.tmpFile?.delete()
                                     }
                                 }
-
                                 if (driveItemId != null) {
                                     val d = aDone.incrementAndGet()
                                     aDoneBytes.addAndGet(item.fileSize)
