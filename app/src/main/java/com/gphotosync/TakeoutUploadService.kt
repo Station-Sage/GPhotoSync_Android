@@ -52,6 +52,7 @@ class TakeoutUploadService : Service() {
 
         var progressCallback: ((TakeoutProgress) -> Unit)? = null
         var logCallback: ((String) -> Unit)? = null
+        var updateLogCallback: ((Int, String) -> Unit)? = null // Worker별 줄 교체
         val logBuffer = mutableListOf<String>()
         private const val LOG_BUFFER_MAX = 200
         var analyzeCallback: ((Int, Long, Int) -> Unit)? = null
@@ -292,6 +293,26 @@ class TakeoutUploadService : Service() {
         val entry = "[$ts] $msg"
         synchronized(logBuffer) { logBuffer.add(entry); if (logBuffer.size > LOG_BUFFER_MAX) logBuffer.removeAt(0) }
         android.os.Handler(android.os.Looper.getMainLooper()).post { logCallback?.invoke("[$ts] $msg") }
+    }
+
+    // Worker별 마지막 로그 줄을 교체 (시작→완료를 한줄로 표시)
+    private val workerLogIndex = java.util.concurrent.ConcurrentHashMap<Int, Int>() // workerId → logBuffer index
+    @Synchronized
+    private fun updateWorkerLog(workerId: Int, msg: String) {
+        val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+        try { getLogWriter()?.apply { write("$ts $msg"); newLine(); flush() } } catch (_: Exception) {}
+        val entry = "[$ts] $msg"
+        synchronized(logBuffer) {
+            val idx = workerLogIndex[workerId]
+            if (idx != null && idx < logBuffer.size) {
+                logBuffer[idx] = entry
+            } else {
+                logBuffer.add(entry)
+                workerLogIndex[workerId] = logBuffer.size - 1
+                if (logBuffer.size > LOG_BUFFER_MAX) { logBuffer.removeAt(0); workerLogIndex.keys.forEach { k -> workerLogIndex[k]?.let { workerLogIndex[k] = it - 1 } } }
+            }
+        }
+        android.os.Handler(android.os.Looper.getMainLooper()).post { updateLogCallback?.invoke(workerId, entry) }
     }
 
     private val imageExt = setOf("jpg","jpeg","png","gif","bmp","webp","heic","heif","tiff","tif","raw","cr2","nef","arw","dng","svg")
@@ -896,7 +917,7 @@ class TakeoutUploadService : Service() {
                         for (item in channel) {
                             try {
                                 val pathInfo = item.fp.substringAfter(api.rootFolder + "/")
-                                liveLog("[W$workerId] ${item.fn} ($pathInfo)")
+                                updateWorkerLog(workerId, "[W$workerId] ⏳ ${item.fn} ($pathInfo) 업로드 중...")
 
                                 val folderOk = run {
                                     if (item.fp in createdFolders) return@run true
@@ -918,7 +939,7 @@ class TakeoutUploadService : Service() {
                                     val isLarge = item.fileSize > 50 * 1024 * 1024
                                     try {
                                         if (isLarge) {
-                                            liveLog("[W$workerId] ⏳ 대용량 파일 (${item.fileSize / 1048576}MB) 순차 업로드: ${item.fn}")
+                                            updateWorkerLog(workerId, "[W$workerId] ⏳ ${item.fn} 대용량(${item.fileSize / 1048576}MB) 업로드 중...")
                                             largeFileMutex.lock()
                                         }
                                         val uploadData = if (item.tmpFile != null && item.tmpFile.exists()) {
@@ -930,12 +951,12 @@ class TakeoutUploadService : Service() {
                                             driveItemId = uploadFileSuspend(api, uploadData, item.fn, item.fp)
                                             if (driveItemId != null) break
                                             if (attempt < 3) {
-                                                liveLog("⚠ [W$workerId] ${item.fn} 업로드 실패, 재시도 $attempt/3")
+                                                updateWorkerLog(workerId, "[W$workerId] ⚠ ${item.fn} 재시도 $attempt/3...")
                                                 kotlinx.coroutines.delay(1000L * attempt)
                                             }
                                         }
                                     } catch (oom: OutOfMemoryError) {
-                                        liveLog("❌ [W$workerId] ${item.fn} 메모리 부족 (${item.fileSize / 1048576}MB)")
+                                        updateWorkerLog(workerId, "[W$workerId] ❌ ${item.fn} 메모리 부족 (${item.fileSize / 1048576}MB)")
                                         System.gc()
                                     } finally {
                                         if (isLarge) largeFileMutex.unlock()
@@ -955,12 +976,12 @@ class TakeoutUploadService : Service() {
                                     val sizeKB = String.format("%.1f", item.fileSize / 1024.0)
                                     val elapsedSec = if (actualUploadStartTime > 0) (System.currentTimeMillis() - actualUploadStartTime) / 1000.0 else 0.0
                                     val avgSpeed = if (elapsedSec > 0) String.format("%.1f", aDoneBytes.get() / 1048576.0 / elapsedSec) else "?"
-                                    liveLog("✅ ${item.fn} (${sizeKB}KB)")
+                                    updateWorkerLog(workerId, "[W$workerId] ✅ ${item.fn} (${sizeKB}KB) ${avgSpeed}MB/s")
                                     notifyProgress("업로드 $pct% (${avgSpeed}MB/s) - ${item.fn}", d, total)
                                 } else {
                                     aDone.incrementAndGet(); aErrors.incrementAndGet()
                                     val reason = if (!folderOk) "폴더 생성 실패" else "업로드 실패 (3회 재시도)"
-                                    liveLog("❌ ${item.fn} - $reason")
+                                    updateWorkerLog(workerId, "[W$workerId] ❌ ${item.fn} - $reason")
                                 }
                                 val prog = TakeoutProgress(aDone.get(), total, aErrors.get(), false, null, aDoneBytes.get(), aSkipped.get())
                                 currentProgress = prog
