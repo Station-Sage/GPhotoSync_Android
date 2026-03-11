@@ -61,10 +61,10 @@ class OneDriveApi(private val context: Context) {
             .build()
 
         client.newCall(req).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) { logToFile("[OD] folder onFailure: ${e.message}"); callback(false) }
+            override fun onFailure(call: Call, e: IOException) { logToFile("[OD] folder onFailure: ${e.message}"); android.util.Log.e("GPhotoSync", "folder onFailure: ${e.message}"); callback(false) }
             override fun onResponse(call: Call, response: Response) {
                 response.use {
-                    logToFile("[OD] folder resp=${it.code} ${it.body?.string()?.take(300)}")
+                    val respBody = it.body?.string()?.take(300); logToFile("[OD] folder resp=${it.code} $respBody"); if (it.code !in 200..201 && it.code != 409) android.util.Log.e("GPhotoSync", "folder FAIL code=${it.code} body=$respBody")
                     if (it.code in 200..201 || it.code == 409) {
                         createFolderChain(token, parts, idx + 1, callback)
                     } else {
