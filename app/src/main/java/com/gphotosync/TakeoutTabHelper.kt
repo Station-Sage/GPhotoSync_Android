@@ -193,6 +193,9 @@ class TakeoutTabHelper(
             takeoutView.findViewById<Button>(R.id.btnReanalyze)?.visibility = View.VISIBLE
         }
     }
+
+    fun setup() {
+        restorePreviousSession()
         takeoutView.findViewById<Button>(R.id.btnOpenTakeout).setOnClickListener {
             activity.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://takeout.google.com/settings/takeout/custom/photo")))
         }
