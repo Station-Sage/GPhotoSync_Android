@@ -15,6 +15,7 @@ import kotlin.coroutines.resume
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.Collections
+import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
 
 
 class TakeoutUploadService : Service() {
@@ -762,7 +763,7 @@ class TakeoutUploadService : Service() {
                                 var totalRead = 0L
                                 var n = zis4.read(buf)
                                 while (n != -1) {
-                                    totalRead += n
+                                    totalRead += n.toLong()
                                     if (tmpOut != null) {
                                         tmpOut.write(buf, 0, n)
                                     } else if (totalRead > threshold) {
