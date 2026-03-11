@@ -91,6 +91,7 @@ class TakeoutTabHelper(
                     lastZipInfoText = "미디어 파일: ${savedMedia.size}개${sizeText} (이전 분석 결과)"
                     takeoutView.findViewById<TextView>(R.id.tvZipInfo).text = lastZipInfoText
                     takeoutView.findViewById<Button>(R.id.btnStartTakeout).isEnabled = true
+                    takeoutView.findViewById<Button>(R.id.btnStartTakeout).visibility = View.VISIBLE
                     takeoutView.findViewById<TextView>(R.id.tvTakeoutStatus).text = "이전 분석 결과 로드 완료. 업로드 가능합니다."
                     appendTakeoutLog("이전 세션 복원: 미디어 ${savedMedia.size}개${sizeText}")
 
@@ -373,6 +374,7 @@ class TakeoutTabHelper(
             lastZipInfoText = "미디어 파일: ${savedMedia.size}개${sizeText} (이전 분석 결과)"
             takeoutView.findViewById<TextView>(R.id.tvZipInfo).text = lastZipInfoText
             takeoutView.findViewById<Button>(R.id.btnStartTakeout).isEnabled = true
+            takeoutView.findViewById<Button>(R.id.btnStartTakeout).visibility = View.VISIBLE
             takeoutView.findViewById<TextView>(R.id.tvTakeoutStatus).text = "이전 분석 결과 사용. 업로드 가능합니다."
             appendTakeoutLog("이전 분석 결과 재사용: 미디어 ${savedMedia.size}개${sizeText}")
             val hasResumable = activity.getSharedPreferences("takeout_progress", AppCompatActivity.MODE_PRIVATE)
