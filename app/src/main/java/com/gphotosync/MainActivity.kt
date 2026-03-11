@@ -250,6 +250,7 @@ class MainActivity : AppCompatActivity() {
                     java.io.FileWriter(file).use { it.write(json.toString(2)) }
                     Toast.makeText(this, "내보내기 완료: ${file.absolutePath}", Toast.LENGTH_LONG).show()
                 } catch (e: Exception) { Toast.makeText(this, "내보내기 실패: ${e.message}", Toast.LENGTH_LONG).show() }
+            }.setNegativeButton("취소", null).show()
     }
 
     private fun exportAuthToJson() {
