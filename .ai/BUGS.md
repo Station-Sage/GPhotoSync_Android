@@ -1,30 +1,27 @@
-# 버그 트래커
+# 알려진 버그 및 개선사항
 
-## 미해결 (우선순위순)
+## 미수정 버그
+1. **대용량 동영상 업로드 중 앱 멈춤/끊김** — 청크 업로드 실패 시 재시도 없이 바로 실패 처리, Worker 블록 시 전체 멈춤
+2. **인증 탭 토큰 만료 미반영** — isMicrosoftAuthed()가 토큰 존재만 확인, 만료 여부 미확인하여 항상 "인증 완료" 표시
+3. **MS 재인증 후 업로드 자동 재시작 안 됨** — 수동으로 업로드 버튼 다시 클릭 필요
+4. **listChildren top=1000 페이징 미구현** — 폴더 내 파일 1000개 초과 시 누락
+5. **sync_log.txt 쓰기 퍼미션 문제** — logToFile 작동 안 됨, 디버깅 로그 저장 불가
+6. **취소 후 프로그레스바 리셋 미확인**
+7. **알림창 진행 상태와 앱 내 프로그레스 불일치** — notifyProgress(300ms)와 progressCallback(500ms) 쓰로틀 차이
 
-### P0 - 업로드 불가/중단 직결
-- [ ] MS 토큰 만료가 잦음: EncryptedSharedPreferences가 앱 재설치 시 초기화. 피할 수 없는 Android 정책
+## 기능 개선 대기
+1. **업로드 중 MS 토큰 만료 처리** — 현재 시작 전에만 검증, 업로드 중간 만료 시 정지 후 재개 미지원
+2. **오류 발생 시 알림 채널 활용 개선**
+3. **대형 Bundle 앨범 성능** — 개별 POST → 배치 처리
+4. **스킵 최적화** — 이어하기 시 로컬 SharedPreferences만으로 스킵 판단 (OneDrive HTTP 호출 제거)
+5. **토큰 손실 원인 조사** — 앱 사용 중 토큰 사라지는 케이스 확인
 
-### P1 - UX 개선
-- [ ] 중단 버튼 후 프로그레스바 계속 움직이는 문제
-- [ ] MS 인증 간편화: refresh_token 자동 갱신은 구현됨, 재설치 시만 재인증 필요
-
-### P2 - 안정성/성능
-- [ ] sync_log.txt 쓰기 실패 (앱 권한 문제, logcat에 오류 출력 추가됨)
-- [ ] checkFileExistsSuspend 순차 호출 -> 속도 병목
-
-## 해결됨
-- [x] WebView 인증 자동화 (브라우저+수동 코드 입력 제거)
-- [x] MS/Google API 설정 JSON 업로드/내보내기
-- [x] SAF 방식 인증 백업 내보내기 퍼미션 수정
-- [x] 업로드 전 MS 토큰 검사 + 만료 시 알림 다이얼로그
-- [x] 실시간 로그 버퍼 복원 (Activity 전환 시)
-- [x] restoreState 3상태 공통함수 분리
-- [x] 탭 위치 저장/복원
-- [x] 로그 중복 복원 제거
-- [x] 폴더 생성 타임아웃 -> 재시도 3회 + Mutex + 캐싱
-- [x] yearOnly 호환성 수정
-- [x] 알림 프로그레스 미갱신 수정
-- [x] DEBUG 로그 제거
-- [x] btnStartTakeout visibility 명시적 VISIBLE 설정
-- [x] api.client public 변경
+## 수정 완료 (2026-03-11)
+- restoreState() 3상태 분기 통합 → UI 일관성 확보
+- btnStartTakeout visibility 누락 → VISIBLE 복원
+- 로그 버퍼 중복 복원 → clear 후 restore
+- 탭 위치 저장/복원 → 앱 전환 후 마지막 탭 유지
+- folderMutex → 폴더별 락 → 병렬성 향상
+- ZIP 파일 비교 URI→파일명 → 분석 결과 보존
+- MS 토큰 검증 OkHttpClient 불일치 → api.client 재사용
+- 속도 표시 0.0MB/s → actualUploadStartTime 기준
