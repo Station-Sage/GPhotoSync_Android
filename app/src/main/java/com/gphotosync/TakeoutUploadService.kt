@@ -15,12 +15,7 @@ import kotlin.coroutines.resume
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import java.util.Collections
-import java.io.InputStream
-import java.io.ByteArrayOutputStream
-import org.apache.commons.compress.archivers.zip.ZipArchiveInputStream
 
-    override fun available() = wrapped.available()
-}
 
 class TakeoutUploadService : Service() {
 
