@@ -55,9 +55,6 @@ class MainActivity : AppCompatActivity() {
     private val jsonFilePicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? -> uri?.let { parseGoogleJson(it) } }
     private val authJsonPicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? -> uri?.let { importAuthFromJson(it) } }
     private val msJsonPicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? -> uri?.let { parseMsJson(it) } }
-    private val exportAuthPicker = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->
-        uri?.let { writeAuthJson(it) }
-    }
     private val zipFilePicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? -> uri?.let { takeoutHelper.onZipSelected(it) } }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -253,10 +250,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun exportAuthToJson() {
-        exportAuthPicker.launch("gphotosync_auth.json")
-    }
-
-    private fun writeAuthJson(uri: Uri) {
         try {
             val json = JSONObject()
             json.put("g_client_id", TokenManager.get(TokenManager.KEY_G_CLIENT_ID) ?: "")
@@ -265,12 +258,13 @@ class MainActivity : AppCompatActivity() {
             json.put("g_refresh_token", TokenManager.get(TokenManager.KEY_G_REFRESH) ?: "")
             json.put("g_expires_at", TokenManager.getLong(TokenManager.KEY_G_EXPIRY))
             json.put("ms_client_id", TokenManager.get(TokenManager.KEY_MS_CLIENT_ID) ?: "")
-            json.put("ms_client_secret", TokenManager.get("ms_client_secret") ?: "")
             json.put("ms_access_token", TokenManager.get(TokenManager.KEY_MS_ACCESS) ?: "")
             json.put("ms_refresh_token", TokenManager.get(TokenManager.KEY_MS_REFRESH) ?: "")
             json.put("ms_expires_at", TokenManager.getLong(TokenManager.KEY_MS_EXPIRY))
-            contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(json.toString(2)) }
-            Toast.makeText(this, "내보내기 완료", Toast.LENGTH_LONG).show()
+            val dir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+            val file = File(dir, "gphotosync_auth.json")
+            FileWriter(file).use { it.write(json.toString(2)) }
+            Toast.makeText(this, "내보내기 완료: ${file.absolutePath}", Toast.LENGTH_LONG).show()
         } catch (e: Exception) { Toast.makeText(this, "내보내기 실패: ${e.message}", Toast.LENGTH_LONG).show() }
     }
 
