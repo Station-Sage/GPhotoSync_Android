@@ -71,8 +71,8 @@ class TakeoutTabHelper(
                     .setNegativeButton("닫기", null)
                     .show()
             }
+        }
     }
-
     fun restorePreviousSession() {
         val prefs = activity.getSharedPreferences("takeout_session", AppCompatActivity.MODE_PRIVATE)
         val savedUri = prefs.getString("zip_uri", null)
