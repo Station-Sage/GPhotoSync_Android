@@ -1,13 +1,10 @@
 package com.gphotosync
 
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
-import android.widget.EditText
 import android.widget.Toast
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.gphotosync.databinding.ActivityOauthBinding
 import okhttp3.*
@@ -17,6 +14,9 @@ import java.net.URLEncoder
 import java.security.MessageDigest
 import java.security.SecureRandom
 import android.util.Base64
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.webkit.WebResourceRequest
 
 class OAuthActivity : AppCompatActivity() {
 
@@ -43,16 +43,30 @@ class OAuthActivity : AppCompatActivity() {
         codeHandled = false
 
         val authUrl = buildAuthUrl(oauthType)
-        try {
-            val browserIntent = Intent(Intent.ACTION_VIEW, Uri.parse(authUrl))
-            startActivity(browserIntent)
-        } catch (e: Exception) {
-            Toast.makeText(this, "브라우저를 열 수 없습니다", Toast.LENGTH_LONG).show()
-            finish()
-            return
+        binding.webView.settings.javaScriptEnabled = true
+        binding.webView.settings.domStorageEnabled = true
+        binding.webView.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                val url = request?.url?.toString() ?: return false
+                if (url.startsWith("http://localhost")) {
+                    if (!codeHandled) {
+                        codeHandled = true
+                        val code = Uri.parse(url).getQueryParameter("code")
+                        if (!code.isNullOrEmpty()) {
+                            binding.webView.visibility = android.view.View.GONE
+                            binding.progressLayout.visibility = android.view.View.VISIBLE
+                            exchangeCodeForToken(code)
+                        } else {
+                            Toast.makeText(this@OAuthActivity, "인증 코드를 받지 못했습니다", Toast.LENGTH_LONG).show()
+                            finish()
+                        }
+                    }
+                    return true
+                }
+                return false
+            }
         }
-
-        showCodeInputDialog()
+        binding.webView.loadUrl(authUrl)
     }
 
     private fun generateCodeVerifier(): String {
@@ -99,49 +113,6 @@ class OAuthActivity : AppCompatActivity() {
             }
             else -> ""
         }
-    }
-
-    private fun showCodeInputDialog() {
-        val editText = EditText(this).apply {
-            hint = "브라우저 주소창의 code= 값을 붙여넣으세요"
-            setPadding(48, 32, 48, 32)
-        }
-
-        AlertDialog.Builder(this)
-            .setTitle("인증 코드 입력")
-            .setMessage("브라우저에서 로그인 후,\n주소창이 http://localhost/?code=XXXX 로 바뀝니다.\n\n" +
-                "주소창의 전체 URL을 복사해서 붙여넣으세요.\n\n" +
-                "(페이지가 로드 안 되는 게 정상입니다)")
-            .setView(editText)
-            .setCancelable(false)
-            .setPositiveButton("확인") { _, _ ->
-                val input = editText.text.toString().trim()
-                val code = extractCode(input)
-                if (code.isNotEmpty()) {
-                    exchangeCodeForToken(code)
-                } else {
-                    Toast.makeText(this, "유효한 코드가 없습니다", Toast.LENGTH_LONG).show()
-                    setResult(RESULT_CANCELED)
-                    finish()
-                }
-            }
-            .setNeutralButton("클립보드에서 붙여넣기") { _, _ ->
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = clipboard.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
-                val code = extractCode(clip)
-                if (code.isNotEmpty()) {
-                    exchangeCodeForToken(code)
-                } else {
-                    Toast.makeText(this, "클립보드에 유효한 코드가 없습니다", Toast.LENGTH_LONG).show()
-                    setResult(RESULT_CANCELED)
-                    finish()
-                }
-            }
-            .setNegativeButton("취소") { _, _ ->
-                setResult(RESULT_CANCELED)
-                finish()
-            }
-            .show()
     }
 
     private fun extractCode(input: String): String {
