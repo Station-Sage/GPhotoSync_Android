@@ -912,6 +912,7 @@ class TakeoutUploadService : Service() {
                                         ok
                                     }
                                 }
+                                var driveItemId: String? = null
                                 if (folderOk) {
                                     val uploadData = if (item.tmpFile != null && item.tmpFile.exists()) item.tmpFile.readBytes() else item.data
                                     for (attempt in 1..3) {
