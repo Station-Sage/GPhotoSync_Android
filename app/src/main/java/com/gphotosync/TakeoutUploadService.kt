@@ -219,6 +219,12 @@ class TakeoutUploadService : Service() {
         val p = getSharedPreferences("takeout_album_map", MODE_PRIVATE)
         val map = mutableMapOf<String, String>()
         for (i in 0 until p.getInt("c", 0)) {
+            val k = p.getString("k$i", null) ?: continue
+            val v = p.getString("v$i", null) ?: continue
+            map[k] = v
+        }
+        return map
+    }
 
     private var logOutputStream: java.io.OutputStream? = null
     private var logWriter: java.io.BufferedWriter? = null
