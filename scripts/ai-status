@@ -1,0 +1,8 @@
+#!/bin/bash
+cd ~/GphotoSync
+echo "현재 .ai/CURRENT_TASK.md:"
+echo "========================="
+cat .ai/CURRENT_TASK.md
+echo ""
+echo "========================="
+echo "수정하려면: ai-write .ai/CURRENT_TASK.md"

@@ -1,0 +1,3 @@
+#!/bin/bash
+tee /dev/stderr | termux-clipboard-set
+echo "📋 클립보드 복사 완료"

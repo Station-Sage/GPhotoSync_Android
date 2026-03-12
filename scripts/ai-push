@@ -1,0 +1,19 @@
+#!/bin/bash
+cd ~/GphotoSync
+MSG="${1:-auto update}"
+
+RESULT=$(git add -A 2>&1)
+DIFF_STAT=$(git diff --cached --stat 2>/dev/null)
+COMMIT_OUT=$(git commit -m "$MSG" 2>&1)
+PUSH_OUT=$(git push origin main 2>&1)
+PUSH_EXIT=$?
+
+if [ $PUSH_EXIT -eq 0 ]; then
+    SUMMARY="✅ Push 완료: $MSG"$'\n'"$DIFF_STAT"
+else
+    SUMMARY="❌ Push 실패"$'\n'"$PUSH_OUT"
+fi
+
+echo "$SUMMARY"
+echo "$SUMMARY" | termux-clipboard-set
+echo "📋 클립보드 복사 완료"

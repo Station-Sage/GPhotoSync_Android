@@ -1,0 +1,27 @@
+#!/bin/bash
+cd ~/GphotoSync
+TMPF="$HOME/.ai_patch_tmp.diff"
+cat > "$TMPF"
+LINES=$(wc -l < "$TMPF")
+if [ "$LINES" -lt 2 ]; then
+    echo "❌ 패치 내용이 비어있습니다" | tee /dev/stderr | termux-clipboard-set
+    rm -f "$TMPF"
+    exit 1
+fi
+RESULT=""
+RESULT+="📋 패치 ($LINES줄)"$'\n'
+RESULT+="🔍 dry-run 검증 중..."$'\n'
+DRYRUN=$(patch -p1 --dry-run < "$TMPF" 2>&1)
+RESULT+="$DRYRUN"$'\n'
+if echo "$DRYRUN" | grep -q "FAILED\|can't find\|malformed"; then
+    RESULT+="❌ 패치 적용 실패. 원본 유지됨"
+    echo "$RESULT"
+    echo "$RESULT" | termux-clipboard-set
+else
+    APPLY=$(patch -p1 < "$TMPF" 2>&1)
+    RESULT+="$APPLY"$'\n'
+    RESULT+="✅ 패치 적용 완료"
+    echo "$RESULT"
+    echo "$RESULT" | termux-clipboard-set
+fi
+rm -f "$TMPF"

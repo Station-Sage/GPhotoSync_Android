@@ -1,0 +1,33 @@
+#!/bin/bash
+cd ~/GphotoSync
+MSG="${1:-auto update}"
+
+echo "=== Git Push ==="
+DIFF_STAT=$(git diff --stat 2>/dev/null; git diff --cached --stat 2>/dev/null)
+git add -A && git commit -m "$MSG" && git push origin main
+
+echo "=== 빌드 대기 중... ==="
+sleep 5
+RUN_ID=$(gh run list --limit 1 --json databaseId --jq '.[0].databaseId')
+gh run watch $RUN_ID
+
+echo "=== 빌드 결과 ==="
+STATUS=$(gh run view $RUN_ID --json conclusion --jq '.conclusion')
+RESULT=""
+if [ "$STATUS" = "success" ]; then
+    rm -rf /storage/emulated/0/Download/app-debug
+    rm -f /storage/emulated/0/Download/app-debug.apk
+    gh run download $RUN_ID --name app-debug --dir /storage/emulated/0/Download/
+    APK_INFO=$(ls -lh /storage/emulated/0/Download/app-debug.apk 2>/dev/null)
+    RESULT="✅ 빌드 성공: $MSG"$'\n'"$DIFF_STAT"$'\n'"$APK_INFO"
+    echo "$RESULT"
+    echo ""
+    echo "📂 Download 폴더를 엽니다. app-debug.apk를 탭하여 설치하세요."
+    am start -a android.intent.action.VIEW -t "vnd.android.document/directory" -d "content://com.android.externalstorage.documents/tree/primary%3ADownload" 2>/dev/null
+else
+    FAILED_LOG=$(gh run view $RUN_ID --log-failed | tail -30)
+    RESULT="❌ 빌드 실패: $MSG"$'\n'"$DIFF_STAT"$'\n'"$FAILED_LOG"
+    echo "$RESULT"
+fi
+echo "$RESULT" | termux-clipboard-set
+echo "📋 클립보드 복사 완료"

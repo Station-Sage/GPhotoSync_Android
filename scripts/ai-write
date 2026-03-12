@@ -1,0 +1,22 @@
+#!/bin/bash
+# 사용법: ai-write app/src/main/java/com/gphotosync/MainActivity.kt
+# 붙여넣기 후 Ctrl+D로 종료
+
+FILE="$1"
+if [ -z "$FILE" ]; then
+    echo "사용법: ai-write <파일경로>"
+    exit 1
+fi
+
+mkdir -p "$(dirname "$FILE")"
+echo "=== $FILE 에 내용을 붙여넣고 Ctrl+D ==="
+cat > "$FILE"
+
+LINES=$(wc -l < "$FILE")
+HEAD=$(head -3 "$FILE")
+TAIL=$(tail -3 "$FILE")
+SUMMARY="✅ $FILE 저장 완료 (${LINES}줄)"$'\n'"--- head ---"$'\n'"$HEAD"$'\n'"--- tail ---"$'\n'"$TAIL"
+
+echo "$SUMMARY"
+echo "$SUMMARY" | termux-clipboard-set
+echo "📋 클립보드 복사 완료"
