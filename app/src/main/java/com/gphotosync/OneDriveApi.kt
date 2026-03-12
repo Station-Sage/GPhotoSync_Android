@@ -195,6 +195,105 @@ class OneDriveApi(private val context: Context) {
                             logToFile("[OD] chunk failed code=${response.code}")
                             callback(null)
                         }
+    /**
+     * 대용량 파일을 File에서 직접 스트리밍 청크 업로드 (메모리에 전체 로드하지 않음)
+     */
+    fun uploadFileFromFile(
+        file: java.io.File,
+        filename: String,
+        folderPath: String,
+        callback: (String?) -> Unit
+    ) {
+        TokenManager.getValidMicrosoftToken(client) { token ->
+            if (token == null) { callback(null); return@getValidMicrosoftToken }
+            val encodedPath = "$folderPath/$filename".trim('/').split("/").joinToString("/") {
+                java.net.URLEncoder.encode(it, "UTF-8").replace("+", "%20")
+            }
+            // 4MB 이하면 단순 업로드
+            if (file.length() <= 4 * 1024 * 1024) {
+                simpleUpload(token, file.readBytes(), encodedPath, callback)
+                return@getValidMicrosoftToken
+            }
+            // 세션 생성
+            val sessionBody = JSONObject().apply {
+                put("item", JSONObject().apply {
+                    put("@microsoft.graph.conflictBehavior", "replace")
+                })
+            }.toString().toRequestBody("application/json".toMediaType())
+            val sessionReq = Request.Builder()
+                .url("$GRAPH/me/drive/root:/$encodedPath:/createUploadSession")
+                .header("Authorization", "Bearer $token")
+                .post(sessionBody).build()
+            client.newCall(sessionReq).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) { logToFile("[OD] fileUpload session fail: ${e.message}"); callback(null) }
+                override fun onResponse(call: Call, response: Response) {
+                    if (!response.isSuccessful) { callback(null); return }
+                    val uploadUrl = JSONObject(response.body?.string() ?: "{}").optString("uploadUrl", "")
+                    if (uploadUrl.isEmpty()) { callback(null); return }
+                    uploadChunksFromFile(uploadUrl, file, callback)
+                }
+            })
+        }
+    }
+
+    private fun uploadChunksFromFile(uploadUrl: String, file: java.io.File, callback: (String?) -> Unit) {
+        val chunkSize = 10 * 1024 * 1024
+        val total = file.length()
+        var offset = 0L
+        val fis = java.io.FileInputStream(file)
+        val buf = ByteArray(chunkSize)
+
+        fun uploadNext() {
+            if (offset >= total) { fis.close(); callback(null); return }
+            val remaining = (total - offset).toInt().coerceAtMost(chunkSize)
+            var read = 0
+            while (read < remaining) {
+                val n = fis.read(buf, read, remaining - read)
+                if (n == -1) break
+                read += n
+            }
+            val chunk = if (read == buf.size) buf else buf.copyOf(read)
+            val end = offset + read
+            var retryCount = 0
+            fun attemptChunk() {
+                val req = Request.Builder()
+                    .url(uploadUrl)
+                    .header("Content-Length", read.toString())
+                    .header("Content-Range", "bytes $offset-${end - 1}/$total")
+                    .put(chunk.toRequestBody("application/octet-stream".toMediaType()))
+                    .build()
+                client.newCall(req).enqueue(object : Callback {
+                    override fun onFailure(call: Call, e: IOException) {
+                        retryCount++
+                        logToFile("[OD] fileChunk onFailure ($retryCount/3): ${e.message}")
+                        if (retryCount < 3) { Thread.sleep(2000L * retryCount); attemptChunk() }
+                        else { fis.close(); callback(null) }
+                    }
+                    override fun onResponse(call: Call, response: Response) {
+                        val respBody = response.body?.string()
+                        if (response.code in listOf(200, 201)) {
+                            fis.close()
+                            val id = try { JSONObject(respBody ?: "{}").optString("id", "") } catch (_: Exception) { "" }
+                            callback(id.ifEmpty { null })
+                        } else if (response.code == 202) {
+                            offset = end
+                            uploadNext()
+                        } else if (response.code in 500..599 && retryCount < 3) {
+                            retryCount++
+                            logToFile("[OD] fileChunk server error ${response.code} ($retryCount/3)")
+                            Thread.sleep(2000L * retryCount); attemptChunk()
+                        } else {
+                            logToFile("[OD] fileChunk failed code=${response.code}")
+                            fis.close(); callback(null)
+                        }
+                    }
+                })
+            }
+            attemptChunk()
+        }
+        uploadNext()
+    }
+
                     }
                 })
             }
