@@ -47,6 +47,7 @@ class TakeoutUploadService : Service() {
     internal val jsonDateMap = java.util.concurrent.ConcurrentHashMap<String, String>()
     internal val folderLocks = java.util.concurrent.ConcurrentHashMap<String, Mutex>()
     internal val createdFolders = mutableSetOf<String>()
+    internal val failedFolders = mutableSetOf<String>()
     internal val largeFileMutex = Mutex()
 
     // === OkHttp 콜백 → suspend 변환 ===
@@ -59,6 +60,7 @@ class TakeoutUploadService : Service() {
                 kotlinx.coroutines.delay(2000L * attempt)
             }
         }
+        liveLog("❌ 폴더 생성 3회 실패: $path")
         return false
     }
 
