@@ -140,14 +140,14 @@ object TokenManager {
             callback(null)
             return
         }
-
-        val body = FormBody.Builder()
+        val bodyBuilder = FormBody.Builder()
             .add("client_id", clientId)
             .add("refresh_token", refresh)
             .add("grant_type", "refresh_token")
-            .add("client_secret", get("ms_client_secret") ?: "")
             .add("scope", "Files.ReadWrite offline_access")
-            .build()
+        val secret = get(KEY_MS_CLIENT_SECRET)
+        if (!secret.isNullOrEmpty()) bodyBuilder.add("client_secret", secret)
+        val body = bodyBuilder.build()
 
         client.newCall(Request.Builder()
             .url("https://login.microsoftonline.com/consumers/oauth2/v2.0/token")
