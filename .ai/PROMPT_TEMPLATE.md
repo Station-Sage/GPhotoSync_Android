@@ -4,13 +4,13 @@
 
 ---
 
-GitHub repo: https://github.com/station-sage/GPhotoSync_Android
+GitHub repo: https://github.com/Station-Sage/GPhotoSync_Android
 
 ## 세션 시작 절차
 1. README.md를 읽어주세요
 2. .ai/ 폴더의 md 파일들을 모두 읽어주세요:
    - PROJECT.md (워크플로 규칙, 핵심 파일)
-   - ARCHITECTURE.md (파이프라인, 동시성, 인증)
+   - ARCHITECTURE.md (파이프라인, 동시성, 인증, 파일 분리 구조)
    - FILE_INDEX.md (파일 목록, 줄수)
    - CURRENT_TASK.md (현재 작업, 체크리스트)
    - BUGS.md (버그 트래커)

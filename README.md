@@ -2,6 +2,14 @@
 
 > 최종 업데이트: 2026-03-11
 
+## ⚠ AI 세션 시작 시 필독
+이 프로젝트는 `.ai/` 폴더에 AI 개발 컨텍스트 문서를 관리합니다.
+**새 AI 채팅 세션을 시작할 때는 반드시 이 README.md를 읽은 후 `.ai/` 폴더의 md 파일들을 모두 읽어주세요.**
+
+파일 목록: PROJECT.md, ARCHITECTURE.md, FILE_INDEX.md, CURRENT_TASK.md, BUGS.md, DECISIONS.md, SCRIPTS.md, PROMPT_TEMPLATE.md
+
+각 파일의 역할은 `.ai/PROMPT_TEMPLATE.md`에 정리되어 있습니다.
+
 ---
 
 ## 1. 프로젝트 개요

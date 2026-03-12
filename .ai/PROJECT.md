@@ -9,15 +9,17 @@
 6. **md 파일 최신 유지**: 작업 완료 시 관련 md 파일도 함께 수정하고 push한다
 
 ## 개발 환경
-Claude Opus (젠스파크 AI Chat) → Termux 복사/붙여넣기 → GitHub push → Actions 빌드 → APK 다운로드 → 수동 설치 → 디버그 → 반복
+Claude Opus (AI Chat) → Termux 복사/붙여넣기 → GitHub push → Actions 빌드 → APK 다운로드 → 수동 설치 → 디버그 → 반복
 
 ## 스크립트 (~/bin/)
 .ai/SCRIPTS.md 참고: ai-patch, ai-copy, ai-apply, ai-push, ai-write, ai-status
 
 ## 핵심 파일 (수정 빈도 높음)
-- TakeoutUploadService.kt (~1030줄): 업로드 핵심 로직 ⚠ 1000줄 초과 — 분리 필요
-- TakeoutTabHelper.kt (~560줄): UI 상태관리, 공통함수
-- OneDriveApi.kt (~530줄): MS Graph API
+- TakeoutTabHelper.kt (562줄): UI 상태관리, 공통함수
+- TakeoutUploadPipeline.kt (357줄): 업로드 파이프라인 (Producer/Worker)
+- OneDriveApi.kt (544줄): MS Graph API
+- TakeoutUploadService.kt (331줄): 서비스 본체
+- TakeoutOperations.kt (268줄): 분석/앨범/마이그레이션
 
 ## 코드 수정 방식 (우선순위)
 1. ai-patch (diff 패치) — 가장 정확
