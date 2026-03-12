@@ -219,19 +219,35 @@ class TakeoutUploadService : Service() {
         val p = getSharedPreferences("takeout_album_map", MODE_PRIVATE)
         val map = mutableMapOf<String, String>()
         for (i in 0 until p.getInt("c", 0)) {
-            val k = p.getString("k$i", null) ?: continue
-            val v = p.getString("v$i", null) ?: continue
-            map[k] = v
-        }
-        return map
-    }
 
+    private var logOutputStream: java.io.OutputStream? = null
     private var logWriter: java.io.BufferedWriter? = null
     private fun getLogWriter(): java.io.BufferedWriter? {
         if (logWriter == null) {
             try {
-                val f = java.io.File(getExternalFilesDir(null) ?: filesDir, "sync_log.txt")
-                logWriter = java.io.BufferedWriter(java.io.FileWriter(f, true), 8192)
+                val resolver = contentResolver
+                val collection = android.provider.MediaStore.Downloads.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+                val cursor = resolver.query(collection,
+                    arrayOf(android.provider.MediaStore.Downloads._ID),
+                    "${android.provider.MediaStore.Downloads.DISPLAY_NAME} = ?",
+                    arrayOf("sync_log.txt"), null)
+                val uri = if (cursor != null && cursor.moveToFirst()) {
+                    val id = cursor.getLong(0)
+                    cursor.close()
+                    android.content.ContentUris.withAppendedId(collection, id)
+                } else {
+                    cursor?.close()
+                    val values = android.content.ContentValues().apply {
+                        put(android.provider.MediaStore.Downloads.DISPLAY_NAME, "sync_log.txt")
+                        put(android.provider.MediaStore.Downloads.MIME_TYPE, "text/plain")
+                        put(android.provider.MediaStore.Downloads.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
+                    }
+                    resolver.insert(collection, values)
+                }
+                if (uri != null) {
+                    logOutputStream = resolver.openOutputStream(uri, "wa")
+                    logWriter = java.io.BufferedWriter(java.io.OutputStreamWriter(logOutputStream!!), 8192)
+                }
             } catch (e: Exception) { android.util.Log.e("TakeoutUpload", "logWriter init fail: ${e.message}") }
         }
         return logWriter
@@ -245,7 +261,6 @@ class TakeoutUploadService : Service() {
         synchronized(logBuffer) { logBuffer.add(entry); if (logBuffer.size > LOG_BUFFER_MAX) logBuffer.removeAt(0) }
         android.os.Handler(android.os.Looper.getMainLooper()).post { logCallback?.invoke("[$ts] $msg") }
     }
-
 
     // === Notification ===
     private var lastNotifyTime = 0L
@@ -307,7 +322,7 @@ class TakeoutUploadService : Service() {
     override fun onDestroy() {
         android.util.Log.w("TakeoutUpload", "onDestroy called - service killed")
         super.onDestroy()
-        try { logWriter?.close() } catch (_: Exception) {}
+        try { logWriter?.close(); logOutputStream?.close() } catch (_: Exception) {}
         job?.cancel()
         scope.cancel()
     }
