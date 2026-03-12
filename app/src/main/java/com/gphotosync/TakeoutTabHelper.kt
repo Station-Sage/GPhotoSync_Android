@@ -56,9 +56,6 @@ class TakeoutTabHelper(
         TakeoutUploadService.logCallback = { line ->
             activity.runOnUiThread { appendTakeoutLog(line) }
         }
-        TakeoutUploadService.updateLogCallback = { workerId, line ->
-            activity.runOnUiThread { updateTakeoutLog(workerId, line) }
-        }
         // Activity 복귀 시 이전 로그 복원
         takeoutLogLines.clear()
         takeoutView.findViewById<TextView>(R.id.tvTakeoutLog).text = ""
@@ -541,22 +538,4 @@ class TakeoutTabHelper(
         sv.post { sv.fullScroll(View.FOCUS_DOWN) }
     }
     // Worker별 마지막 줄 교체
-    private val workerLineIndex = mutableMapOf<Int, Int>() // workerId → takeoutLogLines index
-    fun updateTakeoutLog(workerId: Int, line: String) {
-        val idx = workerLineIndex[workerId]
-        if (idx != null && idx < takeoutLogLines.size) {
-            takeoutLogLines[idx] = line
-        } else {
-            takeoutLogLines.add(line)
-            workerLineIndex[workerId] = takeoutLogLines.size - 1
-            if (takeoutLogLines.size > 100) {
-                takeoutLogLines.removeAt(0)
-                workerLineIndex.keys.forEach { k -> workerLineIndex[k]?.let { v -> workerLineIndex[k] = v - 1 } }
-            }
-        }
-        val tv = takeoutView.findViewById<TextView>(R.id.tvTakeoutLog)
-        tv.text = takeoutLogLines.joinToString("\n")
-        val sv = takeoutView.findViewById<ScrollView>(R.id.scrollTakeoutLog)
-        sv.post { sv.fullScroll(View.FOCUS_DOWN) }
-    }
 }

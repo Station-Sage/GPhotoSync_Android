@@ -28,7 +28,6 @@ class TakeoutUploadService : Service() {
 
         var progressCallback: ((TakeoutProgress) -> Unit)? = null
         var logCallback: ((String) -> Unit)? = null
-        var updateLogCallback: ((Int, String) -> Unit)? = null
         val logBuffer = mutableListOf<String>()
         private const val LOG_BUFFER_MAX = 200
         var analyzeCallback: ((Int, Long, Int) -> Unit)? = null
@@ -231,7 +230,7 @@ class TakeoutUploadService : Service() {
     private fun getLogWriter(): java.io.BufferedWriter? {
         if (logWriter == null) {
             try {
-                val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "sync_log.txt")
+                val f = java.io.File(getExternalFilesDir(null) ?: filesDir, "sync_log.txt")
                 logWriter = java.io.BufferedWriter(java.io.FileWriter(f, true), 8192)
             } catch (e: Exception) { android.util.Log.e("TakeoutUpload", "logWriter init fail: ${e.message}") }
         }
@@ -247,24 +246,6 @@ class TakeoutUploadService : Service() {
         android.os.Handler(android.os.Looper.getMainLooper()).post { logCallback?.invoke("[$ts] $msg") }
     }
 
-    private val workerLogIndex = java.util.concurrent.ConcurrentHashMap<Int, Int>()
-    @Synchronized
-    internal fun updateWorkerLog(workerId: Int, msg: String) {
-        val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
-        try { getLogWriter()?.apply { write("$ts $msg"); newLine(); flush() } } catch (_: Exception) {}
-        val entry = "[$ts] $msg"
-        synchronized(logBuffer) {
-            val idx = workerLogIndex[workerId]
-            if (idx != null && idx < logBuffer.size) {
-                logBuffer[idx] = entry
-            } else {
-                logBuffer.add(entry)
-                workerLogIndex[workerId] = logBuffer.size - 1
-                if (logBuffer.size > LOG_BUFFER_MAX) { logBuffer.removeAt(0); workerLogIndex.keys.forEach { k -> workerLogIndex[k]?.let { workerLogIndex[k] = it - 1 } } }
-            }
-        }
-        android.os.Handler(android.os.Looper.getMainLooper()).post { updateLogCallback?.invoke(workerId, entry) }
-    }
 
     // === Notification ===
     private var lastNotifyTime = 0L
