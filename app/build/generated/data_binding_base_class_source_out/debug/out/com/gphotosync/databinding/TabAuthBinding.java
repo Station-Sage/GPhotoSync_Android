@@ -21,10 +21,16 @@ public final class TabAuthBinding implements ViewBinding {
   private final ScrollView rootView;
 
   @NonNull
+  public final Button btnExportAuth;
+
+  @NonNull
   public final Button btnGoogleAuth;
 
   @NonNull
   public final Button btnGoogleSetup;
+
+  @NonNull
+  public final Button btnImportAuth;
 
   @NonNull
   public final Button btnMsAuth;
@@ -47,14 +53,16 @@ public final class TabAuthBinding implements ViewBinding {
   @NonNull
   public final TextView tvMsStatus;
 
-  private TabAuthBinding(@NonNull ScrollView rootView, @NonNull Button btnGoogleAuth,
-      @NonNull Button btnGoogleSetup, @NonNull Button btnMsAuth, @NonNull Button btnMsSetup,
-      @NonNull Button btnReset, @NonNull TextView tvGoogleClientId,
-      @NonNull TextView tvGoogleStatus, @NonNull TextView tvMsClientId,
-      @NonNull TextView tvMsStatus) {
+  private TabAuthBinding(@NonNull ScrollView rootView, @NonNull Button btnExportAuth,
+      @NonNull Button btnGoogleAuth, @NonNull Button btnGoogleSetup, @NonNull Button btnImportAuth,
+      @NonNull Button btnMsAuth, @NonNull Button btnMsSetup, @NonNull Button btnReset,
+      @NonNull TextView tvGoogleClientId, @NonNull TextView tvGoogleStatus,
+      @NonNull TextView tvMsClientId, @NonNull TextView tvMsStatus) {
     this.rootView = rootView;
+    this.btnExportAuth = btnExportAuth;
     this.btnGoogleAuth = btnGoogleAuth;
     this.btnGoogleSetup = btnGoogleSetup;
+    this.btnImportAuth = btnImportAuth;
     this.btnMsAuth = btnMsAuth;
     this.btnMsSetup = btnMsSetup;
     this.btnReset = btnReset;
@@ -91,6 +99,12 @@ public final class TabAuthBinding implements ViewBinding {
     // This is done to optimize the compiled bytecode for size and performance.
     int id;
     missingId: {
+      id = R.id.btnExportAuth;
+      Button btnExportAuth = ViewBindings.findChildViewById(rootView, id);
+      if (btnExportAuth == null) {
+        break missingId;
+      }
+
       id = R.id.btnGoogleAuth;
       Button btnGoogleAuth = ViewBindings.findChildViewById(rootView, id);
       if (btnGoogleAuth == null) {
@@ -100,6 +114,12 @@ public final class TabAuthBinding implements ViewBinding {
       id = R.id.btnGoogleSetup;
       Button btnGoogleSetup = ViewBindings.findChildViewById(rootView, id);
       if (btnGoogleSetup == null) {
+        break missingId;
+      }
+
+      id = R.id.btnImportAuth;
+      Button btnImportAuth = ViewBindings.findChildViewById(rootView, id);
+      if (btnImportAuth == null) {
         break missingId;
       }
 
@@ -145,8 +165,9 @@ public final class TabAuthBinding implements ViewBinding {
         break missingId;
       }
 
-      return new TabAuthBinding((ScrollView) rootView, btnGoogleAuth, btnGoogleSetup, btnMsAuth,
-          btnMsSetup, btnReset, tvGoogleClientId, tvGoogleStatus, tvMsClientId, tvMsStatus);
+      return new TabAuthBinding((ScrollView) rootView, btnExportAuth, btnGoogleAuth, btnGoogleSetup,
+          btnImportAuth, btnMsAuth, btnMsSetup, btnReset, tvGoogleClientId, tvGoogleStatus,
+          tvMsClientId, tvMsStatus);
     }
     String missingId = rootView.getResources().getResourceName(id);
     throw new NullPointerException("Missing required view with ID: ".concat(missingId));

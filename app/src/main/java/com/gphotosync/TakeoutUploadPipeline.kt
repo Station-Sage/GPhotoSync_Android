@@ -275,17 +275,25 @@ internal fun TakeoutUploadService.startUpload(
                                         fileLog(workerId, "⏳ ${item.fn} 대용량(${item.fileSize / 1048576}MB) 업로드 중...")
                                         largeFileMutex.lock()
                                     }
-                                    val uploadData = if (item.tmpFile != null && item.tmpFile.exists()) {
-                                        val bytes = item.tmpFile.readBytes()
+                                    if (item.tmpFile != null && item.tmpFile.exists()) {
+                                        for (attempt in 1..3) {
+                                            driveItemId = uploadFileFromFileSuspend(api, item.tmpFile, item.fn, item.fp)
+                                            if (driveItemId != null) break
+                                            if (attempt < 3) {
+                                                fileLog(workerId, "⚠ ${item.fn} 재시도 $attempt/3...")
+                                                kotlinx.coroutines.delay(1000L * attempt)
+                                            }
+                                        }
                                         item.tmpFile.delete()
-                                        bytes
-                                    } else item.data
-                                    for (attempt in 1..3) {
-                                        driveItemId = uploadFileSuspend(api, uploadData, item.fn, item.fp)
-                                        if (driveItemId != null) break
-                                        if (attempt < 3) {
-                                            fileLog(workerId, "⚠ ${item.fn} 재시도 $attempt/3...")
-                                            kotlinx.coroutines.delay(1000L * attempt)
+                                    } else {
+                                        val uploadData = item.data
+                                        for (attempt in 1..3) {
+                                            driveItemId = uploadFileSuspend(api, uploadData, item.fn, item.fp)
+                                            if (driveItemId != null) break
+                                            if (attempt < 3) {
+                                                fileLog(workerId, "⚠ ${item.fn} 재시도 $attempt/3...")
+                                                kotlinx.coroutines.delay(1000L * attempt)
+                                            }
                                         }
                                     }
                                 } catch (oom: OutOfMemoryError) {

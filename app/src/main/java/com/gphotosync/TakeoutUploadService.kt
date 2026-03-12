@@ -67,6 +67,9 @@ class TakeoutUploadService : Service() {
     internal suspend fun uploadFileSuspend(api: OneDriveApi, data: ByteArray, fn: String, fp: String): String? =
         suspendCoroutine { cont -> api.uploadFile(data, fn, fp) { cont.resume(it) } }
 
+    internal suspend fun uploadFileFromFileSuspend(api: OneDriveApi, file: java.io.File, fn: String, fp: String): String? =
+        suspendCoroutine { cont -> api.uploadFileFromFile(file, fn, fp) { cont.resume(it) } }
+
     internal suspend fun getItemIdSuspend(api: OneDriveApi, path: String): String? =
         suspendCoroutine { cont -> api.getItemId(path) { cont.resume(it) } }
 

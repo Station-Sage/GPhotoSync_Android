@@ -137,7 +137,9 @@
                 <ScrollView
                     android:id="@+id/scrollLiveLog"
                     android:layout_width="match_parent"
-                    android:layout_height="150dp">
+                    android:layout_height="200dp"
+                    android:scrollbars="vertical"
+                    android:fadeScrollbars="false">
                     <TextView
                         android:id="@+id/tvLiveLog"
                         android:layout_width="match_parent"
@@ -173,19 +175,13 @@
                     android:textStyle="bold"
                     android:textColor="?android:textColorPrimary"
                     android:layout_marginBottom="8dp" />
-                <ScrollView
-                    android:id="@+id/scrollHistory"
+                <ListView
+                    android:id="@+id/lvHistory"
                     android:layout_width="match_parent"
-                    android:layout_height="120dp">
-                    <TextView
-                        android:id="@+id/tvHistorySummary"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:text="기록 없음"
-                        android:textSize="11sp"
-                        android:textColor="?android:textColorSecondary"
-                        android:fontFamily="monospace" />
-                </ScrollView>
+                    android:layout_height="150dp"
+                    android:divider="#22000000"
+                    android:dividerHeight="1dp"
+                    android:scrollbars="vertical" />
                 <Button
                     android:id="@+id/btnShowDetail"
                     android:layout_width="match_parent"
@@ -232,7 +228,8 @@
                     <TextView android:id="@+id/tvSuccessCount"
                         android:layout_width="match_parent" android:layout_height="wrap_content"
                         android:text="완료: 0건" android:textSize="11sp" android:textColor="?android:textColorSecondary" />
-                    <ScrollView android:layout_width="match_parent" android:layout_height="180dp">
+                    <ScrollView android:layout_width="match_parent" android:layout_height="200dp"
+                        android:scrollbars="vertical" android:fadeScrollbars="false">
                         <TextView android:id="@+id/tvSuccessList"
                             android:layout_width="match_parent" android:layout_height="wrap_content"
                             android:text="내역 없음" android:textSize="10sp"
@@ -245,7 +242,8 @@
                     <TextView android:id="@+id/tvFailedCount"
                         android:layout_width="match_parent" android:layout_height="wrap_content"
                         android:text="실패: 0건" android:textSize="11sp" android:textColor="?android:textColorSecondary" />
-                    <ScrollView android:layout_width="match_parent" android:layout_height="180dp">
+                    <ScrollView android:layout_width="match_parent" android:layout_height="200dp"
+                        android:scrollbars="vertical" android:fadeScrollbars="false">
                         <TextView android:id="@+id/tvFailedList"
                             android:layout_width="match_parent" android:layout_height="wrap_content"
                             android:text="내역 없음" android:textSize="10sp"

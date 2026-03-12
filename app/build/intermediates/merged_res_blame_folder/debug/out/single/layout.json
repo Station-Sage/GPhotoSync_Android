@@ -1,19 +1,31 @@
 [
     {
-        "merged": "com.gphotosync.app-mergeDebugResources-42:/layout/activity_oauth.xml",
-        "source": "com.gphotosync.app-main-45:/layout/activity_oauth.xml"
-    },
-    {
         "merged": "com.gphotosync.app-mergeDebugResources-42:/layout/tab_auth.xml",
         "source": "com.gphotosync.app-main-45:/layout/tab_auth.xml"
     },
     {
-        "merged": "com.gphotosync.app-mergeDebugResources-42:/layout/activity_main.xml",
-        "source": "com.gphotosync.app-main-45:/layout/activity_main.xml"
+        "merged": "/data/data/com.termux/files/home/.gradle/daemon/8.2/com.gphotosync.app-mergeDebugResources-42:/layout/tab_info.xml",
+        "source": "/data/data/com.termux/files/home/.gradle/daemon/8.2/com.gphotosync.app-main-45:/layout/tab_info.xml"
     },
     {
-        "merged": "com.gphotosync.app-mergeDebugResources-42:/layout/tab_info.xml",
-        "source": "com.gphotosync.app-main-45:/layout/tab_info.xml"
+        "merged": "/data/data/com.termux/files/home/.gradle/daemon/8.2/com.gphotosync.app-mergeDebugResources-42:/layout/tab_sync.xml",
+        "source": "/data/data/com.termux/files/home/.gradle/daemon/8.2/com.gphotosync.app-main-45:/layout/tab_sync.xml"
+    },
+    {
+        "merged": "/data/data/com.termux/files/home/.gradle/daemon/8.2/com.gphotosync.app-mergeDebugResources-42:/layout/activity_oauth.xml",
+        "source": "/data/data/com.termux/files/home/.gradle/daemon/8.2/com.gphotosync.app-main-45:/layout/activity_oauth.xml"
+    },
+    {
+        "merged": "/data/data/com.termux/files/home/.gradle/daemon/8.2/com.gphotosync.app-mergeDebugResources-42:/layout/activity_main.xml",
+        "source": "/data/data/com.termux/files/home/.gradle/daemon/8.2/com.gphotosync.app-main-45:/layout/activity_main.xml"
+    },
+    {
+        "merged": "/data/data/com.termux/files/home/.gradle/daemon/8.2/com.gphotosync.app-mergeDebugResources-42:/layout/tab_auth.xml",
+        "source": "/data/data/com.termux/files/home/.gradle/daemon/8.2/com.gphotosync.app-main-45:/layout/tab_auth.xml"
+    },
+    {
+        "merged": "com.gphotosync.app-mergeDebugResources-42:/layout/tab_takeout.xml",
+        "source": "com.gphotosync.app-main-45:/layout/tab_takeout.xml"
     },
     {
         "merged": "com.gphotosync.app-mergeDebugResources-42:/layout/tab_sync.xml",

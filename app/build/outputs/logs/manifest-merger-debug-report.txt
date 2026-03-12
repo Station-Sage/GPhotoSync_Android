@@ -1,9 +1,9 @@
 -- Merging decision tree log ---
 manifest
-ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:2:1-59:12
-INJECTED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:2:1-59:12
-INJECTED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:2:1-59:12
-INJECTED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:2:1-59:12
+ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:2:1-65:12
+INJECTED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:2:1-65:12
+INJECTED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:2:1-65:12
+INJECTED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:2:1-65:12
 MERGED from [androidx.databinding:viewbinding:8.2.2] /data/data/com.termux/files/home/.gradle/caches/transforms-3/de56ecbc03d25dfce0efee6c471bd0c8/transformed/jetified-viewbinding-8.2.2/AndroidManifest.xml:2:1-7:12
 MERGED from [com.google.android.material:material:1.11.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/bec7de6f5493746bd6b85bdfc260f89d/transformed/material-1.11.0/AndroidManifest.xml:17:1-24:12
 MERGED from [androidx.constraintlayout:constraintlayout:2.1.4] /data/data/com.termux/files/home/.gradle/caches/transforms-3/5b1e847eb52da651a87fd4b6c66d222b/transformed/constraintlayout-2.1.4/AndroidManifest.xml:2:1-11:12
@@ -86,8 +86,8 @@ ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManif
 	android:name
 		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:7:22-74
 application
-ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:9:5-58:19
-INJECTED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:9:5-58:19
+ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:9:5-64:19
+INJECTED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:9:5-64:19
 MERGED from [com.google.android.material:material:1.11.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/bec7de6f5493746bd6b85bdfc260f89d/transformed/material-1.11.0/AndroidManifest.xml:22:5-20
 MERGED from [com.google.android.material:material:1.11.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/bec7de6f5493746bd6b85bdfc260f89d/transformed/material-1.11.0/AndroidManifest.xml:22:5-20
 MERGED from [androidx.constraintlayout:constraintlayout:2.1.4] /data/data/com.termux/files/home/.gradle/caches/transforms-3/5b1e847eb52da651a87fd4b6c66d222b/transformed/constraintlayout-2.1.4/AndroidManifest.xml:9:5-20
@@ -129,67 +129,77 @@ MERGED from [androidx.startup:startup-runtime:1.1.1] /data/data/com.termux/files
 	android:name
 		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:10:9-38
 activity#com.gphotosync.MainActivity
-ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:19:9-27:20
+ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:19:9-28:20
 	android:screenOrientation
-		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:22:13-49
+		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:23:13-49
+	android:launchMode
+		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:22:13-44
 	android:exported
 		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:21:13-36
 	android:name
 		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:20:13-41
 intent-filter#action:name:android.intent.action.MAIN+category:name:android.intent.category.LAUNCHER
-ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:23:13-26:29
+ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:24:13-27:29
 action#android.intent.action.MAIN
-ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:24:17-69
+ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:25:17-69
 	android:name
-		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:24:25-66
+		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:25:25-66
 category#android.intent.category.LAUNCHER
-ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:25:17-77
+ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:26:17-77
 	android:name
-		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:25:27-74
+		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:26:27-74
 activity#com.gphotosync.OAuthActivity
-ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:29:9-39:20
+ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:30:9-40:20
 	android:screenOrientation
-		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:32:13-49
+		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:33:13-49
 	android:exported
-		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:31:13-36
+		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:32:13-36
 	android:name
-		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:30:13-42
+		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:31:13-42
 intent-filter#action:name:android.intent.action.VIEW+category:name:android.intent.category.BROWSABLE+category:name:android.intent.category.DEFAULT+data:host:oauth+data:scheme:gphotosync
-ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:33:13-38:29
+ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:34:13-39:29
 action#android.intent.action.VIEW
-ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:34:17-69
+ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:35:17-69
 	android:name
-		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:34:25-66
+		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:35:25-66
 category#android.intent.category.DEFAULT
-ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:35:17-76
+ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:36:17-76
 	android:name
-		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:35:27-73
+		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:36:27-73
 category#android.intent.category.BROWSABLE
-ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:36:17-78
+ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:37:17-78
 	android:name
-		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:36:27-75
+		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:37:27-75
 data
-ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:37:17-74
+ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:38:17-74
 	android:host
-		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:37:51-71
+		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:38:51-71
 	android:scheme
-		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:37:23-50
+		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:38:23-50
 activity#com.gphotosync.OAuthCallbackActivity
-ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:41:9-51:20
+ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:42:9-52:20
 	android:launchMode
-		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:44:13-44
+		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:45:13-44
 	android:exported
-		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:43:13-36
+		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:44:13-36
 	android:name
-		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:42:13-50
+		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:43:13-50
 service#com.gphotosync.SyncForegroundService
-ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:53:9-56:56
+ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:54:9-57:56
 	android:exported
-		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:55:13-37
+		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:56:13-37
 	android:foregroundServiceType
-		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:56:13-53
+		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:57:13-53
 	android:name
-		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:54:13-50
+		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:55:13-50
+service#com.gphotosync.TakeoutUploadService
+ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:59:9-62:56
+	android:exported
+		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:61:13-37
+	android:foregroundServiceType
+		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:62:13-53
+	android:name
+		ADDED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml:60:13-49
 uses-sdk
 INJECTED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from /data/data/com.termux/files/home/GphotoSync/app/src/main/AndroidManifest.xml
@@ -558,7 +568,7 @@ ADDED from [androidx.core:core:1.12.0] /data/data/com.termux/files/home/.gradle/
 		ADDED from [androidx.core:core:1.12.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/217cd4443c329c3de6d6b6409afab4f6/transformed/core-1.12.0/AndroidManifest.xml:24:9-44
 	android:name
 		ADDED from [androidx.core:core:1.12.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/217cd4443c329c3de6d6b6409afab4f6/transformed/core-1.12.0/AndroidManifest.xml:23:9-81
-permission#com.gphotosync.debug.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+permission#com.gphotosync.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
 ADDED from [androidx.core:core:1.12.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/217cd4443c329c3de6d6b6409afab4f6/transformed/core-1.12.0/AndroidManifest.xml:22:5-24:47
 	android:protectionLevel
 		ADDED from [androidx.core:core:1.12.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/217cd4443c329c3de6d6b6409afab4f6/transformed/core-1.12.0/AndroidManifest.xml:24:9-44
@@ -568,7 +578,7 @@ uses-permission#${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
 ADDED from [androidx.core:core:1.12.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/217cd4443c329c3de6d6b6409afab4f6/transformed/core-1.12.0/AndroidManifest.xml:26:5-97
 	android:name
 		ADDED from [androidx.core:core:1.12.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/217cd4443c329c3de6d6b6409afab4f6/transformed/core-1.12.0/AndroidManifest.xml:26:22-94
-uses-permission#com.gphotosync.debug.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
+uses-permission#com.gphotosync.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION
 ADDED from [androidx.core:core:1.12.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/217cd4443c329c3de6d6b6409afab4f6/transformed/core-1.12.0/AndroidManifest.xml:26:5-97
 	android:name
 		ADDED from [androidx.core:core:1.12.0] /data/data/com.termux/files/home/.gradle/caches/transforms-3/217cd4443c329c3de6d6b6409afab4f6/transformed/core-1.12.0/AndroidManifest.xml:26:22-94

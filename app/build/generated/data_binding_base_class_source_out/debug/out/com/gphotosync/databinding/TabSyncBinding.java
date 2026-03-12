@@ -6,6 +6,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.ListView;
 import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -57,10 +58,10 @@ public final class TabSyncBinding implements ViewBinding {
   public final LinearLayout layoutSuccess;
 
   @NonNull
-  public final ProgressBar progressBar;
+  public final ListView lvHistory;
 
   @NonNull
-  public final ScrollView scrollHistory;
+  public final ProgressBar progressBar;
 
   @NonNull
   public final ScrollView scrollLiveLog;
@@ -76,9 +77,6 @@ public final class TabSyncBinding implements ViewBinding {
 
   @NonNull
   public final TextView tvFailedList;
-
-  @NonNull
-  public final TextView tvHistorySummary;
 
   @NonNull
   public final TextView tvLiveLog;
@@ -106,10 +104,9 @@ public final class TabSyncBinding implements ViewBinding {
       @NonNull Button btnTabFailed, @NonNull Button btnTabSuccess, @NonNull CardView cardDetails,
       @NonNull CardView cardHistory, @NonNull LinearLayout layoutFailed,
       @NonNull LinearLayout layoutStats, @NonNull LinearLayout layoutSuccess,
-      @NonNull ProgressBar progressBar, @NonNull ScrollView scrollHistory,
+      @NonNull ListView lvHistory, @NonNull ProgressBar progressBar,
       @NonNull ScrollView scrollLiveLog, @NonNull TextView tvDone, @NonNull TextView tvErrors,
-      @NonNull TextView tvFailedCount, @NonNull TextView tvFailedList,
-      @NonNull TextView tvHistorySummary, @NonNull TextView tvLiveLog,
+      @NonNull TextView tvFailedCount, @NonNull TextView tvFailedList, @NonNull TextView tvLiveLog,
       @NonNull TextView tvProgressDetail, @NonNull TextView tvSkipped, @NonNull TextView tvStatus,
       @NonNull TextView tvSuccessCount, @NonNull TextView tvSuccessList,
       @NonNull TextView tvTotal) {
@@ -125,14 +122,13 @@ public final class TabSyncBinding implements ViewBinding {
     this.layoutFailed = layoutFailed;
     this.layoutStats = layoutStats;
     this.layoutSuccess = layoutSuccess;
+    this.lvHistory = lvHistory;
     this.progressBar = progressBar;
-    this.scrollHistory = scrollHistory;
     this.scrollLiveLog = scrollLiveLog;
     this.tvDone = tvDone;
     this.tvErrors = tvErrors;
     this.tvFailedCount = tvFailedCount;
     this.tvFailedList = tvFailedList;
-    this.tvHistorySummary = tvHistorySummary;
     this.tvLiveLog = tvLiveLog;
     this.tvProgressDetail = tvProgressDetail;
     this.tvSkipped = tvSkipped;
@@ -235,15 +231,15 @@ public final class TabSyncBinding implements ViewBinding {
         break missingId;
       }
 
-      id = R.id.progressBar;
-      ProgressBar progressBar = ViewBindings.findChildViewById(rootView, id);
-      if (progressBar == null) {
+      id = R.id.lvHistory;
+      ListView lvHistory = ViewBindings.findChildViewById(rootView, id);
+      if (lvHistory == null) {
         break missingId;
       }
 
-      id = R.id.scrollHistory;
-      ScrollView scrollHistory = ViewBindings.findChildViewById(rootView, id);
-      if (scrollHistory == null) {
+      id = R.id.progressBar;
+      ProgressBar progressBar = ViewBindings.findChildViewById(rootView, id);
+      if (progressBar == null) {
         break missingId;
       }
 
@@ -274,12 +270,6 @@ public final class TabSyncBinding implements ViewBinding {
       id = R.id.tvFailedList;
       TextView tvFailedList = ViewBindings.findChildViewById(rootView, id);
       if (tvFailedList == null) {
-        break missingId;
-      }
-
-      id = R.id.tvHistorySummary;
-      TextView tvHistorySummary = ViewBindings.findChildViewById(rootView, id);
-      if (tvHistorySummary == null) {
         break missingId;
       }
 
@@ -327,9 +317,9 @@ public final class TabSyncBinding implements ViewBinding {
 
       return new TabSyncBinding((ScrollView) rootView, btnHideDetail, btnRetryFailed, btnShowDetail,
           btnSync, btnTabFailed, btnTabSuccess, cardDetails, cardHistory, layoutFailed, layoutStats,
-          layoutSuccess, progressBar, scrollHistory, scrollLiveLog, tvDone, tvErrors, tvFailedCount,
-          tvFailedList, tvHistorySummary, tvLiveLog, tvProgressDetail, tvSkipped, tvStatus,
-          tvSuccessCount, tvSuccessList, tvTotal);
+          layoutSuccess, lvHistory, progressBar, scrollLiveLog, tvDone, tvErrors, tvFailedCount,
+          tvFailedList, tvLiveLog, tvProgressDetail, tvSkipped, tvStatus, tvSuccessCount,
+          tvSuccessList, tvTotal);
     }
     String missingId = rootView.getResources().getResourceName(id);
     throw new NullPointerException("Missing required view with ID: ".concat(missingId));
