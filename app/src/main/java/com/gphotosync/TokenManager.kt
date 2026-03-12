@@ -86,7 +86,7 @@ object TokenManager {
         val clientSecret = get(KEY_G_CLIENT_SECRET)
 
         logToFile("token check: now=${System.currentTimeMillis()/1000} expiry=$expiry diff=${expiry - System.currentTimeMillis()/1000}")
-        if (System.currentTimeMillis() / 1000 < expiry - 300) {
+        if (System.currentTimeMillis() / 1000 < expiry - 60) {
             callback(access)
             return
         }
@@ -131,7 +131,7 @@ object TokenManager {
         val clientId = get(KEY_MS_CLIENT_ID)
 
         logToFile("token check: now=${System.currentTimeMillis()/1000} expiry=$expiry diff=${expiry - System.currentTimeMillis()/1000}")
-        if (System.currentTimeMillis() / 1000 < expiry - 300) {
+        if (System.currentTimeMillis() / 1000 < expiry - 60) {
             callback(access)
             return
         }
