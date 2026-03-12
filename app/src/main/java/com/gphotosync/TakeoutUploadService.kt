@@ -101,7 +101,12 @@ class TakeoutUploadService : Service() {
                 startForeground(NOTIF_ID, buildNotification("Takeout 업로드 준비 중...", 0, 0))
                 startUpload(Uri.parse(uriStr), intent.getStringExtra("start_date"), intent.getStringExtra("end_date"))
             }
-            ACTION_STOP -> { job?.cancel(); stopSelf() }
+            ACTION_STOP -> {
+                if (!TakeoutUploadService.isRunning) { stopSelf(); return START_NOT_STICKY }
+                TakeoutUploadService.isRunning = false
+                job?.cancel()
+                liveLog("업로드 중단 요청...")
+            }
             ACTION_RESUME -> {
                 val uriStr = intent.getStringExtra(EXTRA_ZIP_URI) ?: return START_NOT_STICKY
                 startForeground(NOTIF_ID, buildNotification("Takeout 이어하기...", 0, 0))
