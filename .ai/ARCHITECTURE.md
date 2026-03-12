@@ -16,23 +16,28 @@
 ZIP 엔트리 순회 → 미디어 파일 필터링 → JSON 메타데이터로 연도 추출 → UploadItem 생성 → Channel 전송
 
 ### Worker
-Channel에서 UploadItem 수신 → 폴더별 Mutex로 폴더 생성 (캐시 확인) → uploadFileSuspend (4MB 이하: 단순, 초과: 10MB 청크 + 3회 재시도) → 결과 기록. 대용량(50MB+) 파일은 largeFileMutex로 1개씩만 메모리 로드.
+Channel에서 UploadItem 수신 → 폴더별 Mutex로 폴더 생성 (캐시 확인) → uploadFileSuspend (4MB 이하: 단순, 초과: 10MB 청크 + 3회 재시도) → 결과 기록. 대용량(50MB+) 파일은 largeFileMutex로 1개씩만 메모리 로드. 모든 Worker 로그는 liveLog()로 통일 (파일별 줄 단위).
+
+## 폴더 캐시
+- createdFolders: 생성 성공한 폴더 경로 (부분 경로 포함)
+- failedFolders: 3회 실패한 폴더 경로 → 즉시 false 반환하여 불필요한 HTTP/대기 제거
 
 ## 동시성
 - AtomicInteger/Long: aDone, aDoneBytes, aErrors, aSkipped
-- synchronized: createdFolders set
+- synchronized: createdFolders set, failedFolders set
 - folderLocks (ConcurrentHashMap<String, Mutex>): 폴더별 개별 락
 - largeFileMutex: 50MB 이상 파일 직렬화 (OOM 방지)
 - ConcurrentHashMap: jsonDateMap
+
+## 로그
+- liveLog(): 모든 로그 통일 (Worker 포함). MediaStore API로 Downloads/sync_log.txt에 append. logBuffer(200개)에 보관. UI logCallback으로 실시간 표시.
+- Termux에서 접근: cat /storage/emulated/0/Download/sync_log.txt
 
 ## 인증 흐름
 앱 내 WebView OAuth → localhost 리다이렉트 가로채기 → code 추출 → 토큰 교환 → EncryptedSharedPreferences 저장. 업로드 시작 전 토큰 유효성 검사 → 만료 시 AlertDialog → 인증탭 자동 이동
 
 ## UI 상태 관리
 공통함수 3개: applyUploadingUI / applyFinishedUI / applyIdleUI. Activity 재생성 시 restorePreviousSession()에서 isRunning 확인 → setupCallbacks + applyUploadingUI로 즉시 복원. 탭 위치 SharedPreferences 저장/복원.
-
-## Worker 로그
-updateWorkerLog()로 Worker별 마지막 줄 교체 (진행중→완료를 한줄로). liveLog()는 일반 로그용.
 
 ## 주요 상수
 - 업로드 임계값: 4MB (초과 시 청크)

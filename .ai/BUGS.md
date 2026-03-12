@@ -1,4 +1,4 @@
-# 알려진 버그 및 개선사항 (2026-03-11)
+# 알려진 버그 및 개선사항 (2026-03-12)
 
 ## P1 — 즉시 수정 (사용성 직결)
 ~~1. Activity 재생성 시 UI 초기화~~ → ✅ 수정 완료
@@ -12,24 +12,19 @@
 7. **알림창 진행 상태와 앱 내 프로그레스 불일치** — notifyProgress(500ms)와 progressCallback 쓰로틀 차이
 
 ## P3 — 개선 (안정성/편의)
-8. **sync_log.txt 쓰기 퍼미션 문제** — logToFile 작동 안 됨
+~~8. sync_log.txt 쓰기 퍼미션 문제~~ → ✅ MediaStore API로 Downloads 직접 쓰기
 9. **listChildren 페이징** — @odata.nextLink 처리됨, 실사용 확인 필요
 10. **취소 후 프로그레스바 리셋 미확인**
 11. **대형 Bundle 앨범 성능** — 개별 POST, 수백 개 앨범 시 느림
 12. **토큰 손실 원인 조사** — 앱 사용 중 토큰 사라지는 케이스
 
 ## 코드 품질
-~~13. TakeoutUploadService.kt 1000줄 초과~~ → ✅ 4파일 분리 완료 (Service 331, Pipeline 357, Operations 268, Utils 117)
+~~13. TakeoutUploadService.kt 1000줄 초과~~ → ✅ 4파일 분리 완료
+~~14. updateWorkerLog/updateLogCallback 미사용 코드~~ → ✅ 제거 완료
 
-## 수정 완료 (2026-03-11)
-- restoreState() 3상태 분기 통합
-- btnStartTakeout visibility 복원
-- 로그 버퍼 중복 복원 → clear 후 restore
-- 탭 위치 저장/복원
-- folderMutex → 폴더별 락 (folderLocks ConcurrentHashMap)
-- ZIP 파일 비교 URI→파일명
-- MS 토큰 검증 OkHttpClient api.client 재사용
-- 속도 표시 actualUploadStartTime 기준
-- P1-1~P1-4 전부 수정
-- Worker 로그 한줄 표시 (updateWorkerLog)
-- TakeoutUploadService.kt → 4파일 분리
+## 수정 완료 (2026-03-12)
+- sync_log.txt MediaStore API (Downloads 쓰기 + Termux 접근)
+- Worker 로그 liveLog 전환 (updateWorkerLog 완전 제거)
+- failedFolders 캐시 (실패 폴더 반복 재시도 방지)
+- skipOneDriveCheck 기본값 true
+- 미사용 코드 정리 (updateLogCallback, workerLineIndex, .orig)
