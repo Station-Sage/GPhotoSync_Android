@@ -34,7 +34,7 @@ class TakeoutUploadService : Service() {
         var organizeCallback: ((Int, Int, Int) -> Unit)? = null
         var migrateCallback: ((Int, Int, Int) -> Unit)? = null
         var authExpiredCallback: (() -> Unit)? = null
-        var skipOneDriveCheck: Boolean = false
+        var skipOneDriveCheck: Boolean = true
         @Volatile var isRunning: Boolean = false
         @Volatile var currentProgress: TakeoutProgress? = null
         @Volatile var uploadStartTime: Long = 0L
