@@ -28,7 +28,6 @@ class TakeoutUploadService : Service() {
 
         var progressCallback: ((TakeoutProgress) -> Unit)? = null
         var logCallback: ((String) -> Unit)? = null
-        var refreshLogCallback: (() -> Unit)? = null
         val logBuffer = mutableListOf<String>()
         private const val LOG_BUFFER_MAX = 200
         var analyzeCallback: ((Int, Long, Int) -> Unit)? = null
@@ -269,28 +268,6 @@ class TakeoutUploadService : Service() {
         android.os.Handler(android.os.Looper.getMainLooper()).post { logCallback?.invoke("[$ts] $msg") }
     }
 
-
-    private val workerFileIndex = java.util.concurrent.ConcurrentHashMap<Int, Int>()
-    @Synchronized
-    internal fun fileLog(workerId: Int, msg: String) {
-        val ts = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
-        try { getLogWriter()?.apply { write("$ts [W$workerId] $msg"); newLine(); flush() } } catch (_: Exception) {}
-        val entry = "[$ts] [W$workerId] $msg"
-        synchronized(logBuffer) {
-            val idx = workerFileIndex[workerId]
-            if (idx != null && idx < logBuffer.size && logBuffer[idx].contains("⏳")) {
-                logBuffer[idx] = entry
-            } else {
-                logBuffer.add(entry)
-                workerFileIndex[workerId] = logBuffer.size - 1
-                if (logBuffer.size > LOG_BUFFER_MAX) {
-                    logBuffer.removeAt(0)
-                    for (k in workerFileIndex.keys) { workerFileIndex[k]?.let { if (it > 0) workerFileIndex[k] = it - 1 } }
-                }
-            }
-        }
-        android.os.Handler(android.os.Looper.getMainLooper()).post { refreshLogCallback?.invoke() }
-    }
     // === Notification ===
     private var lastNotifyTime = 0L
     @Synchronized

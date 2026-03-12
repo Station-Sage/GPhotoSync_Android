@@ -56,6 +56,18 @@ class TakeoutTabHelper(
         TakeoutUploadService.logCallback = { line ->
             activity.runOnUiThread { appendTakeoutLog(line) }
         }
+        TakeoutUploadService.refreshLogCallback = {
+            activity.runOnUiThread {
+                val tv = takeoutView.findViewById<TextView>(R.id.tvTakeoutLog)
+                synchronized(TakeoutUploadService.logBuffer) {
+                    takeoutLogLines.clear()
+                    takeoutLogLines.addAll(TakeoutUploadService.logBuffer)
+                    tv.text = takeoutLogLines.joinToString("\n")
+                }
+                val sv = takeoutView.findViewById<android.widget.ScrollView>(R.id.scrollTakeoutLog)
+                sv.post { sv.fullScroll(android.view.View.FOCUS_DOWN) }
+            }
+        }
         // Activity 복귀 시 이전 로그 복원
         takeoutLogLines.clear()
         takeoutView.findViewById<TextView>(R.id.tvTakeoutLog).text = ""

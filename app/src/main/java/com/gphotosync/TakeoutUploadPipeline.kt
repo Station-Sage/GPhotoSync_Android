@@ -248,7 +248,7 @@ internal fun TakeoutUploadService.startUpload(
                     for (item in channel) {
                         try {
                             val pathInfo = item.fp.substringAfter(api.rootFolder + "/")
-                            liveLog("[W$workerId] ⏳ ${item.fn} ($pathInfo) 업로드 중...")
+                            fileLog(workerId, "⏳ ${item.fn} ($pathInfo) 업로드 중...")
 
                             val folderOk = run {
                                 if (item.fp in createdFolders) return@run true
@@ -272,7 +272,7 @@ internal fun TakeoutUploadService.startUpload(
                                 val isLarge = item.fileSize > 50 * 1024 * 1024
                                 try {
                                     if (isLarge) {
-                                        liveLog("[W$workerId] ⏳ ${item.fn} 대용량(${item.fileSize / 1048576}MB) 업로드 중...")
+                                        fileLog(workerId, "⏳ ${item.fn} 대용량(${item.fileSize / 1048576}MB) 업로드 중...")
                                         largeFileMutex.lock()
                                     }
                                     val uploadData = if (item.tmpFile != null && item.tmpFile.exists()) {
@@ -284,12 +284,12 @@ internal fun TakeoutUploadService.startUpload(
                                         driveItemId = uploadFileSuspend(api, uploadData, item.fn, item.fp)
                                         if (driveItemId != null) break
                                         if (attempt < 3) {
-                                            liveLog("[W$workerId] ⚠ ${item.fn} 재시도 $attempt/3...")
+                                            fileLog(workerId, "⚠ ${item.fn} 재시도 $attempt/3...")
                                             kotlinx.coroutines.delay(1000L * attempt)
                                         }
                                     }
                                 } catch (oom: OutOfMemoryError) {
-                                    liveLog("[W$workerId] ❌ ${item.fn} 메모리 부족 (${item.fileSize / 1048576}MB)")
+                                    fileLog(workerId, "❌ ${item.fn} 메모리 부족 (${item.fileSize / 1048576}MB)")
                                     System.gc()
                                 } finally {
                                     if (isLarge) largeFileMutex.unlock()
@@ -310,7 +310,7 @@ internal fun TakeoutUploadService.startUpload(
                                 val sizeKB = String.format("%.1f", item.fileSize / 1024.0)
                                 val elapsedSec = if (TakeoutUploadService.actualUploadStartTime > 0) (System.currentTimeMillis() - TakeoutUploadService.actualUploadStartTime) / 1000.0 else 0.0
                                 val avgSpeed = if (elapsedSec > 0) String.format("%.1f", aDoneBytes.get() / 1048576.0 / elapsedSec) else "?"
-                                liveLog("[W$workerId] ✅ ${item.fn} (${sizeKB}KB) ${avgSpeed}MB/s")
+                                fileLog(workerId, "✅ ${item.fn} (${sizeKB}KB) ${avgSpeed}MB/s")
                                 notifyProgress("$pct% ($d/$total) ${avgSpeed}MB/s", d, total)
                                 val prog = TakeoutProgress(d, total, aErrors.get(), false, null, aDoneBytes.get(), aSkipped.get())
                                 TakeoutUploadService.currentProgress = prog
@@ -318,7 +318,7 @@ internal fun TakeoutUploadService.startUpload(
                             } else {
                                 aErrors.incrementAndGet()
                                 val reason = if (!folderOk) "폴더 생성 실패" else "업로드 실패 (3회 재시도)"
-                                liveLog("[W$workerId] ❌ ${item.fn} - $reason")
+                                fileLog(workerId, "❌ ${item.fn} - $reason")
                                 val prog = TakeoutProgress(aDone.get(), total, aErrors.get(), false, null, aDoneBytes.get(), aSkipped.get())
                                 TakeoutUploadService.currentProgress = prog
                                 TakeoutUploadService.progressCallback?.invoke(prog)
