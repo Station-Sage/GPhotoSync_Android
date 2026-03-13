@@ -102,14 +102,11 @@ class TakeoutUploadService : Service() {
                 startUpload(Uri.parse(uriStr), intent.getStringExtra("start_date"), intent.getStringExtra("end_date"))
             }
             ACTION_STOP -> {
+                if (!isRunning) return START_NOT_STICKY
                 liveLog("업로드 중단 요청...")
-                TakeoutUploadService.isRunning = false
+                isRunning = false
                 job?.cancel()
-                scope.launch {
-                    kotlinx.coroutines.delay(500)
-                    stopForeground(true)
-                    stopSelf()
-                }
+                stopForeground(true)
             }
             ACTION_RESUME -> {
                 val uriStr = intent.getStringExtra(EXTRA_ZIP_URI) ?: return START_NOT_STICKY
@@ -244,29 +241,9 @@ class TakeoutUploadService : Service() {
     private fun getLogWriter(): java.io.BufferedWriter? {
         if (logWriter == null) {
             try {
-                val resolver = contentResolver
-                val collection = android.provider.MediaStore.Downloads.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
-                val cursor = resolver.query(collection,
-                    arrayOf(android.provider.MediaStore.Downloads._ID),
-                    "${android.provider.MediaStore.Downloads.DISPLAY_NAME} = ?",
-                    arrayOf("sync_log.txt"), null)
-                val uri = if (cursor != null && cursor.moveToFirst()) {
-                    val id = cursor.getLong(0)
-                    cursor.close()
-                    android.content.ContentUris.withAppendedId(collection, id)
-                } else {
-                    cursor?.close()
-                    val values = android.content.ContentValues().apply {
-                        put(android.provider.MediaStore.Downloads.DISPLAY_NAME, "sync_log.txt")
-                        put(android.provider.MediaStore.Downloads.MIME_TYPE, "text/plain")
-                        put(android.provider.MediaStore.Downloads.RELATIVE_PATH, android.os.Environment.DIRECTORY_DOWNLOADS)
-                    }
-                    resolver.insert(collection, values)
-                }
-                if (uri != null) {
-                    logOutputStream = resolver.openOutputStream(uri, "wa")
-                    logWriter = java.io.BufferedWriter(java.io.OutputStreamWriter(logOutputStream!!), 8192)
-                }
+                val logFile = java.io.File(filesDir, "sync_log.txt")
+                logOutputStream = java.io.FileOutputStream(logFile, true)
+                logWriter = java.io.BufferedWriter(java.io.OutputStreamWriter(logOutputStream!!), 8192)
             } catch (e: Exception) { android.util.Log.e("TakeoutUpload", "logWriter init fail: ${e.message}") }
         }
         return logWriter
