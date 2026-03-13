@@ -137,17 +137,25 @@ object TokenManager {
         }
 
         if (refresh.isNullOrEmpty() || clientId.isNullOrEmpty()) {
+            logToFile("[MS] refresh 실패: refresh 또는 clientId 없음")
             callback(null)
             return
         }
-        val bodyBuilder = FormBody.Builder()
+        
+        val clientSecret = get(KEY_MS_CLIENT_SECRET)
+        if (clientSecret.isNullOrEmpty()) {
+            logToFile("[MS] refresh 실패: client_secret 없음 (confidential client 필수)")
+            callback(null)
+            return
+        }
+        
+        val body = FormBody.Builder()
             .add("client_id", clientId)
+            .add("client_secret", clientSecret)
             .add("refresh_token", refresh)
             .add("grant_type", "refresh_token")
             .add("scope", "Files.ReadWrite offline_access")
-        val secret = get(KEY_MS_CLIENT_SECRET)
-        if (!secret.isNullOrEmpty()) bodyBuilder.add("client_secret", secret)
-        val body = bodyBuilder.build()
+            .build()
 
         client.newCall(Request.Builder()
             .url("https://login.microsoftonline.com/consumers/oauth2/v2.0/token")

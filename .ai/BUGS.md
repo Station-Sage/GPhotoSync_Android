@@ -12,8 +12,8 @@
 - ✅ P2-4: 알림/앱 내 진행률 불일치
 - ✅ P2-5: 중단 버튼 1회 클릭 즉시 중단 안 됨 + 2회 클릭 시 앱 종료 (stopSelf() 추가, 실기기 테스트 필요)
 - ✅ P2-6: 토큰 만료 시 즉시 중단 + 재인증 팝업 (5회 연속 실패 감지)
-- ⏳ P2-7: 대용량 파일 OOM → 스트리밍 청크 업로드로 해결 (862MB 성공, 전체 완료 테스트 필요)
-- ❌ P2-8: Azure 공개 클라이언트 설정 (invalid_client — 토큰 refresh 불가)
+- ✅ P2-7: 대용량 파일 OOM → 스트리밍 청크 업로드로 해결 (862MB 성공, 전체 업로드 완료)
+- ⏳ P2-8: Azure confidential client 전환 (client_secret 필수 전송, 하드코딩 제거 필요)
 
 ## P3 (개선)
 - ✅ P3-8: sync_log.txt MediaStore API로 Downloads 쓰기
