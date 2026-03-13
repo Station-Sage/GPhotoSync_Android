@@ -245,6 +245,7 @@ internal fun TakeoutUploadService.startUpload(
             // Workers: Channel에서 받아 병렬 업로드
             val workers = (1..3).map { workerId ->
                 launch {
+                    var consecutiveFailures = 0
                     for (item in channel) {
                         try {
                             val pathInfo = item.fp.substringAfter(api.rootFolder + "/")
@@ -307,6 +308,7 @@ internal fun TakeoutUploadService.startUpload(
 
                             if (driveItemId != null) {
                                 val d = aDone.incrementAndGet()
+                                consecutiveFailures = 0
                                 aDoneBytes.addAndGet(item.fileSize)
                                 if (TakeoutUploadService.actualUploadStartTime == 0L) TakeoutUploadService.actualUploadStartTime = System.currentTimeMillis()
                                 synchronized(lock) {
@@ -326,6 +328,19 @@ internal fun TakeoutUploadService.startUpload(
                             } else {
                                 aErrors.incrementAndGet()
                                 val reason = if (!folderOk) "폴더 생성 실패" else "업로드 실패 (3회 재시도)"
+                                consecutiveFailures++
+                                if (consecutiveFailures >= 5) {
+                                    val tokenCheck = suspendCoroutine<Boolean> { cont ->
+                                        TokenManager.getValidMicrosoftToken(api.client) { t -> cont.resume(t != null) }
+                                    }
+                                    if (!tokenCheck) {
+                                        liveLog("⛔ 토큰 만료 감지 — 업로드 즉시 중단. 인증 탭에서 재로그인 필요")
+                                        notifyProgress("❌ MS 인증 만료 - 재로그인 필요", 0, 0)
+                                        android.os.Handler(android.os.Looper.getMainLooper()).post { TakeoutUploadService.authExpiredCallback?.invoke() }
+                                        job?.cancel()
+                                        return@launch
+                                    }
+                                }
                                 fileLog(workerId, "❌ ${item.fn} - $reason")
                                 val prog = TakeoutProgress(aDone.get(), total, aErrors.get(), false, null, aDoneBytes.get(), aSkipped.get())
                                 TakeoutUploadService.currentProgress = prog
