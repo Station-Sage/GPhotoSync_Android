@@ -33,7 +33,7 @@ class SyncForegroundService : Service() {
 
     private fun logToFile(msg: String) {
         try {
-            val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "sync_log.txt")
+            val f = java.io.File(filesDir, "sync_log.txt")
             f.appendText("${java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())} $msg\n")
         } catch (_: Exception) {}
     }

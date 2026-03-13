@@ -15,9 +15,12 @@ import java.io.IOException
  */
 object TokenManager {
 
+    private var appContext: Context? = null
+
     private fun logToFile(msg: String) {
         try {
-            val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "sync_log.txt")
+            val ctx = appContext ?: return
+            val f = java.io.File(ctx.filesDir, "sync_log.txt")
             f.appendText(msg + "\n")
         } catch (_: Exception) {}
     }
@@ -41,6 +44,7 @@ object TokenManager {
     private var prefs: SharedPreferences? = null
 
     fun init(context: Context) {
+        appContext = context.applicationContext
         try {
             val masterKey = MasterKey.Builder(context)
                 .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)

@@ -31,7 +31,7 @@ class GooglePhotosApi(private val context: Context) {
 
     private fun logToFile(msg: String) {
         try {
-            val f = java.io.File(android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS), "sync_log.txt")
+            val f = java.io.File(context.filesDir, "sync_log.txt")
             f.appendText(msg + "\n")
         } catch (_: Exception) {}
     }

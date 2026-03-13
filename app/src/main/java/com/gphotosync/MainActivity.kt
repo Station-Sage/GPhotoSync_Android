@@ -58,6 +58,15 @@ class MainActivity : AppCompatActivity() {
     private val exportAuthPicker = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->
         uri?.let { writeAuthJson(it) }
     }
+    private val logExportPicker = registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri: Uri? ->
+        uri?.let { exportLogToUri(it) }
+    }
+    private val googleConfigExportPicker = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->
+        uri?.let { writeGoogleConfigJson(it) }
+    }
+    private val msConfigExportPicker = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->
+        uri?.let { writeMsConfigJson(it) }
+    }
     private val zipFilePicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? -> uri?.let { takeoutHelper.onZipSelected(it) } }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -183,6 +192,26 @@ class MainActivity : AppCompatActivity() {
             prefs.edit().putInt("theme", theme).apply()
             applySavedTheme()
         }
+        v.findViewById<Button>(R.id.btnExportLog)?.setOnClickListener {
+            val logFile = java.io.File(filesDir, "sync_log.txt")
+            if (logFile.exists() && logFile.length() > 0) {
+                logExportPicker.launch("sync_log.txt")
+            } else {
+                Toast.makeText(this, "로그 파일이 없습니다", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun exportLogToUri(uri: Uri) {
+        try {
+            val logFile = java.io.File(filesDir, "sync_log.txt")
+            contentResolver.openOutputStream(uri)?.use { out ->
+                logFile.inputStream().use { it.copyTo(out) }
+            }
+            Toast.makeText(this, "로그 내보내기 완료", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "로그 내보내기 실패: ${e.message}", Toast.LENGTH_LONG).show()
+        }
     }
 
     // ======== DIALOGS ========
@@ -206,16 +235,18 @@ class MainActivity : AppCompatActivity() {
                     } else { Toast.makeText(this, "Client ID를 입력하세요", Toast.LENGTH_SHORT).show() }
                 }
             }.setNeutralButton("JSON 내보내기") { _, _ ->
-                try {
-                    val json = JSONObject()
-                    json.put("client_id", TokenManager.get(TokenManager.KEY_G_CLIENT_ID) ?: "")
-                    json.put("client_secret", TokenManager.get(TokenManager.KEY_G_CLIENT_SECRET) ?: "")
-                    val dir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-                    val file = java.io.File(dir, "google_api_config.json")
-                    java.io.FileWriter(file).use { it.write(json.toString(2)) }
-                    Toast.makeText(this, "내보내기 완료: ${file.absolutePath}", Toast.LENGTH_LONG).show()
-                } catch (e: Exception) { Toast.makeText(this, "내보내기 실패: ${e.message}", Toast.LENGTH_LONG).show() }
+                googleConfigExportPicker.launch("google_api_config.json")
             }.setNegativeButton("취소", null).show()
+    }
+
+    private fun writeGoogleConfigJson(uri: Uri) {
+        try {
+            val json = JSONObject()
+            json.put("client_id", TokenManager.get(TokenManager.KEY_G_CLIENT_ID) ?: "")
+            json.put("client_secret", TokenManager.get(TokenManager.KEY_G_CLIENT_SECRET) ?: "")
+            contentResolver.openOutputStream(uri)?.use { it.write(json.toString(2).toByteArray()) }
+            Toast.makeText(this, "내보내기 완료", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) { Toast.makeText(this, "내보내기 실패: ${e.message}", Toast.LENGTH_LONG).show() }
     }
 
     private fun showMsSetupDialog() {
@@ -243,16 +274,18 @@ class MainActivity : AppCompatActivity() {
                     } else { Toast.makeText(this, "Client ID를 입력하세요", Toast.LENGTH_SHORT).show() }
                 }
             }.setNeutralButton("JSON 내보내기") { _, _ ->
-                try {
-                    val json = JSONObject()
-                    json.put("client_id", TokenManager.get(TokenManager.KEY_MS_CLIENT_ID) ?: "")
-                    json.put("client_secret", TokenManager.get("ms_client_secret") ?: "")
-                    val dir = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-                    val file = java.io.File(dir, "ms_api_config.json")
-                    java.io.FileWriter(file).use { it.write(json.toString(2)) }
-                    Toast.makeText(this, "내보내기 완료: ${file.absolutePath}", Toast.LENGTH_LONG).show()
-                } catch (e: Exception) { Toast.makeText(this, "내보내기 실패: ${e.message}", Toast.LENGTH_LONG).show() }
+                msConfigExportPicker.launch("ms_api_config.json")
             }.setNegativeButton("취소", null).show()
+    }
+
+    private fun writeMsConfigJson(uri: Uri) {
+        try {
+            val json = JSONObject()
+            json.put("client_id", TokenManager.get(TokenManager.KEY_MS_CLIENT_ID) ?: "")
+            json.put("client_secret", TokenManager.get("ms_client_secret") ?: "")
+            contentResolver.openOutputStream(uri)?.use { it.write(json.toString(2).toByteArray()) }
+            Toast.makeText(this, "내보내기 완료", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) { Toast.makeText(this, "내보내기 실패: ${e.message}", Toast.LENGTH_LONG).show() }
     }
 
     private fun exportAuthToJson() {
