@@ -4,15 +4,16 @@
 
 ### P2 (중요)
 - P2-5: 중단 버튼 즉시 중단 (코드 수정 완료, 실기기 테스트 필요)
-- P2-8: Azure 공개 클라이언트 토큰 refresh 실패 (invalid_client — 앱 등록 진행 중)
+- P2-9: 로그 파일을 앱 내부 저장소로 이전 (Play Store 정책 대응)
+  - logToFile: TokenManager, GooglePhotosApi, OneDriveApi, SyncForegroundService
+  - liveLog/fileLog: TakeoutUploadService (MediaStore → filesDir)
+  - MainActivity: Downloads 직접 접근 제거
+  - 내보내기 버튼 추가 (SAF)
 
 ### P3 (개선)
 - P3-12: 대용량 번들 앨범 성능 저하 (개별 POST 호출)
 
-## 완료 (삭제 예정 — 다음 정리 시 제거)
-- ✅ P2-6: 토큰 만료 5회 연속 실패 → 즉시 중단 + 재인증 팝업
-- ✅ P2-7: 대용량 파일 OOM → 스트리밍 청크 업로드 (862MB 성공)
-- ✅ P3-8: sync_log.txt MediaStore API
-- ✅ P3-10: listChildren 페이징 확인
-- ✅ P3-11: 취소 후 진행바 리셋
-- ✅ P3-13: 분석 UI 97% 멈춤 해결
+## 완료
+- ✅ P2-6: 토큰 만료 5회 연속 실패 → 즉시 중단
+- ✅ P2-7: 대용량 파일 OOM → 스트리밍 청크 업로드
+- ✅ P2-8: Azure 공개 클라이언트 전환 + 인증 성공
