@@ -61,7 +61,7 @@ class TakeoutTabHelper(
             takeoutView.findViewById<Button>(R.id.btnStartTakeout).visibility = View.VISIBLE
             takeoutView.findViewById<Button>(R.id.btnStartTakeout).text = "🚀 OneDrive에 업로드"
             takeoutView.findViewById<Button>(R.id.btnResumeTakeout).visibility = View.VISIBLE
-            takeoutView.findViewById<ProgressBar>(R.id.pbTakeoutUpload).visibility = View.GONE
+            takeoutView.findViewById<ProgressBar>(R.id.takeoutProgressBar).visibility = View.GONE
             takeoutView.findViewById<TextView>(R.id.tvTakeoutStatus).visibility = View.GONE
         }
 
