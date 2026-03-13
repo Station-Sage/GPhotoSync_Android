@@ -102,10 +102,14 @@ class TakeoutUploadService : Service() {
                 startUpload(Uri.parse(uriStr), intent.getStringExtra("start_date"), intent.getStringExtra("end_date"))
             }
             ACTION_STOP -> {
-                if (!TakeoutUploadService.isRunning) { stopSelf(); return START_NOT_STICKY }
+                liveLog("업로드 중단 요청...")
                 TakeoutUploadService.isRunning = false
                 job?.cancel()
-                liveLog("업로드 중단 요청...")
+                scope.launch {
+                    kotlinx.coroutines.delay(500)
+                    stopForeground(true)
+                    stopSelf()
+                }
             }
             ACTION_RESUME -> {
                 val uriStr = intent.getStringExtra(EXTRA_ZIP_URI) ?: return START_NOT_STICKY
