@@ -212,19 +212,24 @@ class TakeoutTabState(
 
     fun applyFinishedUI(progress: TakeoutProgress) {
         takeoutView.findViewById<ProgressBar>(R.id.takeoutProgressBar).visibility = View.GONE
-        takeoutView.findViewById<Button>(R.id.btnStopTakeout).visibility = View.GONE
+        val btnStop = takeoutView.findViewById<Button>(R.id.btnStopTakeout)
+        btnStop.visibility = View.GONE
+        btnStop.isEnabled = true
         takeoutView.findViewById<Button>(R.id.btnStartTakeout).isEnabled = true
         takeoutView.findViewById<Button>(R.id.btnStartTakeout).visibility = View.VISIBLE
         takeoutView.findViewById<Button>(R.id.btnStartTakeout).text = "🚀 OneDrive에 업로드"
         val hasResumable = activity.getSharedPreferences("takeout_progress", AppCompatActivity.MODE_PRIVATE)
             .getStringSet("uf", emptySet())?.isNotEmpty() == true
+        val isStopped = progress.errorMessage?.contains("중단") == true
         takeoutView.findViewById<Button>(R.id.btnResumeTakeout).visibility =
-            if (hasResumable && progress.errorMessage?.contains("중단") == true) View.VISIBLE else View.GONE
-        val success = progress.done - progress.errors - progress.skipped
+            if (hasResumable && isStopped) View.VISIBLE else View.GONE
         val tvStatus = takeoutView.findViewById<TextView>(R.id.tvTakeoutStatus)
+        tvStatus.visibility = View.VISIBLE
         if (progress.errorMessage != null) {
-            val s = "오류: ${progress.errorMessage}"; tvStatus.text = s; helper.lastTakeoutStatusText = s
+            val s = if (isStopped) "중단됨 - 이어하기 버튼으로 재개 가능" else "오류: ${progress.errorMessage}"
+            tvStatus.text = s; helper.lastTakeoutStatusText = s
         } else {
+            val success = progress.done - progress.errors - progress.skipped
             val s = "완료! 성공:${success} 스킵:${progress.skipped} 실패:${progress.errors}"; tvStatus.text = s; helper.lastTakeoutStatusText = s
         }
         val albumCount = activity.getSharedPreferences("takeout_album_map", AppCompatActivity.MODE_PRIVATE).getInt("c", 0)
