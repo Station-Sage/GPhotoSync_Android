@@ -7,7 +7,7 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.*
-import kotlin.coroutines.suspendCoroutine
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
 class SyncForegroundService : Service() {
@@ -23,6 +23,7 @@ class SyncForegroundService : Service() {
         var retryItems: List<SyncRecord>? = null
         var logCallback: ((String) -> Unit)? = null
         var currentSessionId: String = ""
+        @Volatile var isRunning: Boolean = false
         private val createdFolders = mutableSetOf<String>()
     }
 
@@ -74,11 +75,11 @@ class SyncForegroundService : Service() {
     private fun startSync(isRetry: Boolean) {
         logToFile("startSync called, isRetry=$isRetry")
         synchronized(createdFolders) { createdFolders.clear() }
-        synchronized(createdFolders) { createdFolders.clear() }
         val googleApi   = GooglePhotosApi(this)
         val oneDriveApi = OneDriveApi(this)
         val progressDb  = SyncProgressStore(this)
 
+        isRunning = true
         syncJob = scope.launch {
             try {
                 val synced = progressDb.loadSyncedIds().toMutableSet()
@@ -89,6 +90,7 @@ class SyncForegroundService : Service() {
                     if (failedItems.isEmpty()) {
                         notifyProgress("재시도할 항목이 없습니다", 0, 0)
                         progressCallback?.invoke(SyncProgress(0, 0, 0, true, null, 0))
+                        isRunning = false
                         stopSelf()
                         return@launch
                     }
@@ -98,17 +100,20 @@ class SyncForegroundService : Service() {
                     fullSync(googleApi, oneDriveApi, progressDb, synced)
                 }
 
+                isRunning = false
                 withContext(Dispatchers.Main) {
                     stopForeground(STOP_FOREGROUND_DETACH)
                     stopSelf()
                 }
             } catch (e: CancellationException) {
                 logToFile("CancellationException: ${e.message}")
+                isRunning = false
                 notifyProgress("동기화 중단됨", 0, 0)
                 stopForeground(STOP_FOREGROUND_DETACH)
                 stopSelf()
             } catch (e: Exception) {
                 logToFile("Exception in startSync: ${e.message}")
+                isRunning = false
                 progressCallback?.invoke(SyncProgress(0, 0, 0, false, e.message, 0))
                 notifyProgress("오류 발생: ${e.message}", 0, 0)
                 stopForeground(STOP_FOREGROUND_DETACH)
@@ -128,8 +133,7 @@ class SyncForegroundService : Service() {
 
         var sessionId: String? = null
         var pickerUri: String? = null
-        var sessionDone = false
-        val sessionResult = suspendCoroutine<Pair<String?, String?>> { cont ->
+        val sessionResult = suspendCancellableCoroutine<Pair<String?, String?>> { cont ->
             googleApi.createSession { sid, uri -> cont.resume(Pair(sid, uri)) }
         }
         sessionId = sessionResult.first; pickerUri = sessionResult.second
@@ -151,19 +155,19 @@ class SyncForegroundService : Service() {
         notifyProgress("Google Photos에서 사진을 선택하세요...", 0, 0)
 
         var mediaReady = false
-        while (!mediaReady && scope.isActive) {
+        while (!mediaReady && isActive) {
             delay(3000)
-            mediaReady = suspendCoroutine<Boolean> { cont ->
+            mediaReady = suspendCancellableCoroutine<Boolean> { cont ->
                 googleApi.pollSession(sessionId!!) { ready -> cont.resume(ready) }
             }
             logToFile("fullSync - polling, mediaReady=$mediaReady")
         }
 
-        if (!scope.isActive) return
+        if (!isActive) return
 
         notifyProgress("선택된 사진 목록 가져오는 중...", 0, 0)
         liveLog("선택된 사진 목록 가져오는 중...")
-        val allItems: List<MediaItem> = suspendCoroutine<List<MediaItem>> { cont ->
+        val allItems: List<MediaItem> = suspendCancellableCoroutine<List<MediaItem>> { cont ->
             googleApi.listPickedMedia(sessionId!!,
                 onDone = { items -> cont.resume(items) },
                 onError = { err -> logToFile("listPickedMedia error: $err"); cont.resume(emptyList()) }
@@ -171,7 +175,7 @@ class SyncForegroundService : Service() {
         }
 
         logToFile("fullSync - picked items: ${allItems.size}")
-        
+
 
         val total = allItems.size
         var done = 0
@@ -187,7 +191,7 @@ class SyncForegroundService : Service() {
         liveLog("동기화 시작: 전체 ${total}개, 기존 동기화 ${synced.size}개")
 
         for (item in allItems) {
-            if (!scope.isActive) break
+            if (!isActive) break
 
             if (item.id in synced) {
                 done++; skipped++
@@ -196,7 +200,7 @@ class SyncForegroundService : Service() {
                 continue
             }
 
-            val fileData: ByteArray? = suspendCoroutine<ByteArray?> { cont ->
+            val fileData: ByteArray? = suspendCancellableCoroutine<ByteArray?> { cont ->
                 googleApi.downloadMedia(item) { data -> cont.resume(data) }
             }
 
@@ -217,7 +221,7 @@ class SyncForegroundService : Service() {
             // 폴더 캐시로 불필요한 ensureFolder 호출 방지
             val folderCached = synchronized(createdFolders) { folderPath in createdFolders }
             val folderOk = if (folderCached) true else {
-                val result = suspendCoroutine<Boolean> { cont ->
+                val result = suspendCancellableCoroutine<Boolean> { cont ->
                     oneDriveApi.ensureFolder(folderPath) { cont.resume(it) }
                 }
                 if (result) synchronized(createdFolders) { createdFolders.add(folderPath) }
@@ -225,7 +229,7 @@ class SyncForegroundService : Service() {
             }
 
             if (folderOk) {
-                val driveId = suspendCoroutine<String?> { cont ->
+                val driveId = suspendCancellableCoroutine<String?> { cont ->
                     oneDriveApi.uploadFile(safeData, item.filename, folderPath) { cont.resume(it) }
                 }
                 uploadOk = driveId != null
@@ -254,7 +258,7 @@ class SyncForegroundService : Service() {
 
         googleApi.deleteSession(sessionId!!)
 
-        val msg = if (scope.isActive) "완료! 성공:${done - errors - skipped} 스킵:${skipped} 실패:${errors}" else "동기화 중단됨"
+        val msg = if (isActive) "완료! 성공:${done - errors - skipped} 스킵:${skipped} 실패:${errors}" else "동기화 중단됨"
         liveLog(msg)
         notifyProgress(msg, done, total)
         progressDb.setDoneCount(done)
@@ -275,10 +279,10 @@ class SyncForegroundService : Service() {
         notifyProgress("재시도 시작 (${total}개)", done, total)
 
         for (record in failedItems) {
-            if (!scope.isActive) break
+            if (!isActive) break
 
             val item = MediaItem(record.id, record.filename, "", "", "", false)
-            val fileData: ByteArray? = suspendCoroutine<ByteArray?> { cont ->
+            val fileData: ByteArray? = suspendCancellableCoroutine<ByteArray?> { cont ->
                 googleApi.downloadMedia(item) { data -> cont.resume(data) }
             }
 
@@ -296,7 +300,7 @@ class SyncForegroundService : Service() {
 
             val folderCached = synchronized(createdFolders) { folderPath in createdFolders }
             val folderOk = if (folderCached) true else {
-                val result = suspendCoroutine<Boolean> { cont ->
+                val result = suspendCancellableCoroutine<Boolean> { cont ->
                     oneDriveApi.ensureFolder(folderPath) { cont.resume(it) }
                 }
                 if (result) synchronized(createdFolders) { createdFolders.add(folderPath) }
@@ -304,7 +308,7 @@ class SyncForegroundService : Service() {
             }
 
             if (folderOk) {
-                val driveId = suspendCoroutine<String?> { cont ->
+                val driveId = suspendCancellableCoroutine<String?> { cont ->
                     oneDriveApi.uploadFile(fileData, record.filename, folderPath) { cont.resume(it) }
                 }
                 uploadOk = driveId != null
@@ -380,6 +384,7 @@ class SyncForegroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        isRunning = false
         syncJob?.cancel()
         scope.cancel()
     }
