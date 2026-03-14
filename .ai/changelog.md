@@ -2,6 +2,15 @@
 
 ## 2026-03-14
 
+### 작업 환경 확장: 환경4, 환경5 추가
+- 환경4: AI챗 + VS Code + Git (Win10 랩탑) — .ai/env-vscode-laptop.md 신규 생성
+- 환경5: AI챗 + Termux code-server (갤럭시탭 S8 울트라) — .ai/env-termux-codeserver.md 신규 생성
+- AGENTS.md: 환경별 추가 문서 섹션 추가
+- .ai/index.md: 작업 환경 표 5개로 확장, 클립보드 명령 표 추가, 참조 파일 표 갱신
+- .ai/decisions.md: D9 추가 (환경 선택 근거, 검토 후 제외된 방식 기록)
+- 검토한 방식: GitHub 웹 편집기, github.dev, Contents API, Git Trees API, Claude Code Actions
+- 선정 기준: 복사-붙여넣기 편의성, 다중 파일 단일 커밋, 기기 성능 제약, 비용
+
 ### 리팩토링: OneDrive API suspend 전환
 - OneDriveApi.kt: 전체 메서드 callback → suspend (suspendCancellableCoroutine + OkHttp async)
 - OneDriveUploader.kt: 신규 생성 — simple upload (≤4MiB), chunked upload (>4MiB, 10MiB chunks)

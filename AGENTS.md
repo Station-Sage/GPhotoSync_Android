@@ -8,7 +8,11 @@ https://github.com/Station-Sage/GPhotoSync_Android
 1. .ai/index.md (라우터)
 2. BUGS.md (버그 현황)
 3. .ai/todo.md (할일)
-Termux + AI챗 환경이면 .ai/env-termux-chat.md 추가로 읽기
+
+환경별 추가 문서:
+- Termux + AI챗 (스마트폰): .ai/env-termux-chat.md
+- VS Code + AI챗 (Win10 랩탑): .ai/env-vscode-laptop.md
+- Termux code-server + AI챗 (갤럭시탭): .ai/env-termux-codeserver.md
 
 ## 프로젝트
 GPhotoSync — Google Takeout ZIP → OneDrive 업로드 Android 앱 (Kotlin)
