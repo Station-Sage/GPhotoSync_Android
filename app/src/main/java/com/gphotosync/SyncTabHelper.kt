@@ -212,6 +212,24 @@ class SyncTabHelper(
         prefs.edit().putStringSet("entries", history).putString("latest", entry).apply()
     }
 
+    fun setSyncingUI() {
+        isSyncing = true
+        syncView.findViewById<Button>(R.id.btnSync).text = "동기화 중단"
+        syncView.findViewById<Button>(R.id.btnSync).setBackgroundColor(0xFFF44336.toInt())
+        syncView.findViewById<ProgressBar>(R.id.progressBar).visibility = View.VISIBLE
+        syncView.findViewById<ProgressBar>(R.id.progressBar).isIndeterminate = true
+        syncView.findViewById<TextView>(R.id.tvProgressDetail).visibility = View.VISIBLE
+        syncView.findViewById<View>(R.id.layoutStats).visibility = View.VISIBLE
+    }
+
+    fun setIdleUI() {
+        isSyncing = false
+        syncView.findViewById<Button>(R.id.btnSync).text = "동기화 시작"
+        syncView.findViewById<Button>(R.id.btnSync).setBackgroundColor(0xFF2E7D32.toInt())
+        syncView.findViewById<ProgressBar>(R.id.progressBar).visibility = View.GONE
+        syncView.findViewById<TextView>(R.id.tvProgressDetail).visibility = View.GONE
+    }
+
     fun loadHistorySummary() {
         val prefs = activity.getSharedPreferences("sync_history", AppCompatActivity.MODE_PRIVATE)
         val history = prefs.getStringSet("entries", emptySet()) ?: emptySet()

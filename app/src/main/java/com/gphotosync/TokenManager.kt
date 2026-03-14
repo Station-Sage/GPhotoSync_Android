@@ -43,6 +43,21 @@ object TokenManager {
 
     private var prefs: SharedPreferences? = null
 
+    // MS 토큰 동시 갱신 방지 (3 Worker가 동시에 refresh 시 첫 번째만 실제 갱신, 나머지는 결과 대기)
+    @Volatile private var isMsRefreshing = false
+    private val msPendingCallbacks = mutableListOf<(String?) -> Unit>()
+    private val msPendingLock = Any()
+
+    private fun notifyMsPendingCallbacks(token: String?) {
+        val pending = synchronized(msPendingLock) {
+            val list = msPendingCallbacks.toList()
+            msPendingCallbacks.clear()
+            isMsRefreshing = false
+            list
+        }
+        pending.forEach { it(token) }
+    }
+
     fun init(context: Context) {
         appContext = context.applicationContext
         try {
@@ -146,6 +161,16 @@ object TokenManager {
             return
         }
 
+        // 동시 갱신 방지: 이미 갱신 중이면 콜백을 큐에 등록하고 결과 대기
+        synchronized(msPendingLock) {
+            if (isMsRefreshing) {
+                logToFile("[MS] 이미 갱신 중 — 큐에 등록 (pending: ${msPendingCallbacks.size + 1})")
+                msPendingCallbacks.add(callback)
+                return
+            }
+            isMsRefreshing = true
+        }
+
         // 공개 클라이언트(모바일 앱, PKCE 방식)는 client_secret 없이 refresh_token만으로 갱신 가능
         // confidential client인 경우에만 client_secret 포함
         val clientSecret = get(KEY_MS_CLIENT_SECRET)
@@ -156,6 +181,9 @@ object TokenManager {
             .add("scope", "Files.ReadWrite offline_access")
         if (!clientSecret.isNullOrEmpty()) {
             bodyBuilder.add("client_secret", clientSecret)
+            logToFile("[MS] Confidential client 갱신 시도")
+        } else {
+            logToFile("[MS] Public client 갱신 시도 (client_secret 없음)")
         }
         val body = bodyBuilder.build()
 
@@ -164,10 +192,14 @@ object TokenManager {
             .post(body)
             .build()
         ).enqueue(object : Callback {
-            override fun onFailure(call: Call, e: IOException) = callback(null)
+            override fun onFailure(call: Call, e: IOException) {
+                logToFile("[MS] 갱신 실패 (네트워크): ${e.message}")
+                callback(null)
+                notifyMsPendingCallbacks(null)
+            }
             override fun onResponse(call: Call, response: Response) {
                 val json = JSONObject(response.body?.string() ?: "{}")
-                    logToFile("refresh response: $json")
+                logToFile("refresh response: $json")
                 if (json.has("access_token")) {
                     val newToken = json.getString("access_token")
                     val expiresIn = json.optLong("expires_in", 3600)
@@ -175,7 +207,11 @@ object TokenManager {
                     if (json.has("refresh_token")) save(KEY_MS_REFRESH, json.getString("refresh_token"))
                     saveLong(KEY_MS_EXPIRY, System.currentTimeMillis() / 1000 + expiresIn)
                     callback(newToken)
-                } else callback(null)
+                    notifyMsPendingCallbacks(newToken)
+                } else {
+                    callback(null)
+                    notifyMsPendingCallbacks(null)
+                }
             }
         })
     }

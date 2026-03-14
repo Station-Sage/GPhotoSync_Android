@@ -320,6 +320,7 @@ class MainActivity : AppCompatActivity() {
             if (json.has("g_refresh_token")) TokenManager.save(TokenManager.KEY_G_REFRESH, json.getString("g_refresh_token"))
             if (json.has("g_expires_at")) TokenManager.saveLong(TokenManager.KEY_G_EXPIRY, json.getLong("g_expires_at"))
             if (json.has("ms_client_id")) TokenManager.save(TokenManager.KEY_MS_CLIENT_ID, json.getString("ms_client_id"))
+            if (json.has("ms_client_secret")) TokenManager.save(TokenManager.KEY_MS_CLIENT_SECRET, json.getString("ms_client_secret"))
             if (json.has("ms_access_token")) TokenManager.save(TokenManager.KEY_MS_ACCESS, json.getString("ms_access_token"))
             if (json.has("ms_refresh_token")) TokenManager.save(TokenManager.KEY_MS_REFRESH, json.getString("ms_refresh_token"))
             if (json.has("ms_expires_at")) TokenManager.saveLong(TokenManager.KEY_MS_EXPIRY, json.getLong("ms_expires_at"))
@@ -401,6 +402,12 @@ class MainActivity : AppCompatActivity() {
         takeoutHelper.setupCallbacks()
         SyncForegroundService.progressCallback = { p -> runOnUiThread { syncHelper.updateProgress(p) } }
         SyncForegroundService.logCallback = { l -> runOnUiThread { syncHelper.appendLiveLog(l) } }
+        // 백그라운드에서 완료/중단된 경우 isSyncing 플래그 복원
+        if (SyncForegroundService.isRunning) {
+            syncHelper.setSyncingUI()
+        } else if (syncHelper.isSyncing) {
+            syncHelper.setIdleUI()
+        }
         val tabLayout = findViewById<TabLayout>(R.id.tabLayout)
         val savedTab = getSharedPreferences("app_settings", MODE_PRIVATE).getInt("last_tab", 0)
         if (tabLayout.selectedTabPosition != savedTab) tabLayout.getTabAt(savedTab)?.select()
