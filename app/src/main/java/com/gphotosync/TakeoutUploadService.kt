@@ -102,8 +102,10 @@ class TakeoutUploadService : Service() {
                 startUpload(Uri.parse(uriStr), intent.getStringExtra("start_date"), intent.getStringExtra("end_date"))
             }
             ACTION_STOP -> {
-                if (!isRunning) return START_NOT_STICKY
-                liveLog("업로드 중단 요청...")
+                // isRunning 여부와 관계없이 job이 활성화된 경우 모두 취소
+                // (분석 중, 업로드 전처리 중에도 중단 가능)
+                if (!isRunning && job?.isActive != true) return START_NOT_STICKY
+                liveLog("중단 요청...")
                 isRunning = false
                 job?.cancel()
                 stopForeground(true)

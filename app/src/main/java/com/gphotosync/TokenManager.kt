@@ -145,21 +145,19 @@ object TokenManager {
             callback(null)
             return
         }
-        
+
+        // 공개 클라이언트(모바일 앱, PKCE 방식)는 client_secret 없이 refresh_token만으로 갱신 가능
+        // confidential client인 경우에만 client_secret 포함
         val clientSecret = get(KEY_MS_CLIENT_SECRET)
-        if (clientSecret.isNullOrEmpty()) {
-            logToFile("[MS] refresh 실패: client_secret 없음 (confidential client 필수)")
-            callback(null)
-            return
-        }
-        
-        val body = FormBody.Builder()
+        val bodyBuilder = FormBody.Builder()
             .add("client_id", clientId)
-            .add("client_secret", clientSecret)
             .add("refresh_token", refresh)
             .add("grant_type", "refresh_token")
             .add("scope", "Files.ReadWrite offline_access")
-            .build()
+        if (!clientSecret.isNullOrEmpty()) {
+            bodyBuilder.add("client_secret", clientSecret)
+        }
+        val body = bodyBuilder.build()
 
         client.newCall(Request.Builder()
             .url("https://login.microsoftonline.com/consumers/oauth2/v2.0/token")
