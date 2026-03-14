@@ -155,7 +155,7 @@ class SyncForegroundService : Service() {
         notifyProgress("Google Photos에서 사진을 선택하세요...", 0, 0)
 
         var mediaReady = false
-        while (!mediaReady && isActive) {
+        while (!mediaReady && isRunning) {
             delay(3000)
             mediaReady = suspendCancellableCoroutine<Boolean> { cont ->
                 googleApi.pollSession(sessionId!!) { ready -> cont.resume(ready) }
@@ -163,7 +163,7 @@ class SyncForegroundService : Service() {
             logToFile("fullSync - polling, mediaReady=$mediaReady")
         }
 
-        if (!isActive) return
+        if (!isRunning) return
 
         notifyProgress("선택된 사진 목록 가져오는 중...", 0, 0)
         liveLog("선택된 사진 목록 가져오는 중...")
@@ -191,7 +191,7 @@ class SyncForegroundService : Service() {
         liveLog("동기화 시작: 전체 ${total}개, 기존 동기화 ${synced.size}개")
 
         for (item in allItems) {
-            if (!isActive) break
+            if (!isRunning) break
 
             if (item.id in synced) {
                 done++; skipped++
@@ -258,7 +258,7 @@ class SyncForegroundService : Service() {
 
         googleApi.deleteSession(sessionId!!)
 
-        val msg = if (isActive) "완료! 성공:${done - errors - skipped} 스킵:${skipped} 실패:${errors}" else "동기화 중단됨"
+        val msg = if (isRunning) "완료! 성공:${done - errors - skipped} 스킵:${skipped} 실패:${errors}" else "동기화 중단됨"
         liveLog(msg)
         notifyProgress(msg, done, total)
         progressDb.setDoneCount(done)
@@ -279,7 +279,7 @@ class SyncForegroundService : Service() {
         notifyProgress("재시도 시작 (${total}개)", done, total)
 
         for (record in failedItems) {
-            if (!isActive) break
+            if (!isRunning) break
 
             val item = MediaItem(record.id, record.filename, "", "", "", false)
             val fileData: ByteArray? = suspendCancellableCoroutine<ByteArray?> { cont ->

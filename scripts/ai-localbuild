@@ -1,0 +1,22 @@
+#!/data/data/com.termux/files/usr/bin/bash
+set -e
+cd ~/GphotoSync
+
+echo "📥 Pull..."
+git pull origin main 2>&1 | tail -3
+
+echo "🔨 Build..."
+BUILD_OUTPUT=$(./gradlew assembleDebug 2>&1 | tail -5)
+echo "$BUILD_OUTPUT"
+
+APK="app/build/outputs/apk/debug/app-debug.apk"
+if [ -f "$APK" ]; then
+  cp "$APK" /storage/emulated/0/Download/GPhotoSync-debug.apk
+  RESULT="✅ APK → /storage/emulated/0/Download/GPhotoSync-debug.apk"
+else
+  RESULT="❌ APK 생성 실패"
+fi
+
+echo "$RESULT"
+echo "$BUILD_OUTPUT
+$RESULT" | ai-copy
