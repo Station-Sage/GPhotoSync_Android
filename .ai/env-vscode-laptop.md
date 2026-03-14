@@ -26,17 +26,20 @@ https://code.visualstudio.com/ 에서 다운로드, 확장 최소화 (성능)
 ### 3. 레포 클론
 VS Code 터미널 (Git Bash) 에서:
 
-    git clone https://github.com/Station-Sage/GPhotoSync_Android.git
-    cd GPhotoSync_Android
+    git clone https://github.com/Station-Sage/GPhotoSync_Android.git ~/GphotoSync
+    cd ~/GphotoSync
 
-### 4. ai-copy 스크립트 (Git Bash용)
+### 4. 스크립트 설치
 
-    mkdir -p ~/bin
-    echo '#!/bin/bash' > ~/bin/ai-copy
-    echo 'cat | clip.exe' >> ~/bin/ai-copy
-    chmod +x ~/bin/ai-copy
+    bash scripts/setup-laptop.sh
+    source ~/.bashrc
 
-~/.bashrc에 추가: export PATH="$HOME/bin:$PATH"
+## 스크립트 사용법
+- ai-copy: 범용 클립보드 (예: cat file.kt | ai-copy)
+- ai-read 파일명: 소스 파일 → 클립보드 (예: ai-read OneDriveApi.kt)
+- ai-err: 빌드 후 에러 → 클립보드
+- ai-diff: 변경사항 diff → 클립보드
+- 사용 후 AI챗에 Ctrl+V로 붙여넣기
 
 ## 작업 흐름
 
@@ -47,24 +50,20 @@ VS Code 터미널 (Git Bash) 에서:
 4. 여러 파일이면 2~3 반복
 
 ### VS Code → AI챗 (결과 전달)
-방법 1 — 파일 내용:
 
-    cat app/src/main/java/com/gphotosync/OneDriveApi.kt | ai-copy
+    # 소스 파일 전달
+    ai-read OneDriveApi.kt
 
-AI챗에 Ctrl+V
+    # 빌드 에러 전달
+    ai-err
 
-방법 2 — 빌드 에러:
+    # 변경사항 전달
+    ai-diff
 
-    # 에러 수
-    ./gradlew assembleDebug 2>&1 | grep "^e:" | wc -l | ai-copy
+    # 수동 전달
+    cat 아무파일 | ai-copy
 
-    # 에러 상세
-    ./gradlew assembleDebug 2>&1 | grep "^e:" | ai-copy
-
-    # 파일별 에러 수
-    ./gradlew assembleDebug 2>&1 | grep "^e:" | sed 's/.*gphotosync\///' | cut -d: -f1 | sort | uniq -c | sort -rn | ai-copy
-
-방법 3 — 짧은 내용: VS Code에서 드래그 선택 → Ctrl+C → AI챗에 Ctrl+V
+전부 실행 후 AI챗에 Ctrl+V
 
 ### 커밋 & 푸시
 VS Code 터미널에서:

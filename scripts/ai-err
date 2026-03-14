@@ -1,0 +1,11 @@
+#!/bin/bash
+cd ~/GphotoSync
+ERRORS=$(./gradlew assembleDebug 2>&1 | grep "^e:")
+COUNT=$(echo "$ERRORS" | wc -l)
+if [ -z "$ERRORS" ]; then
+  echo "✅ 빌드 성공!" | clip.exe
+  echo "✅ 빌드 성공!"
+else
+  echo "$ERRORS" | clip.exe
+  echo "❌ 에러 ${COUNT}개 → 클립보드"
+fi

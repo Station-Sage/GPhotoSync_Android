@@ -1,0 +1,8 @@
+#!/bin/bash
+FILE=$(find app/src -name "$1" 2>/dev/null | head -1)
+if [ -z "$FILE" ]; then
+  echo "파일 못 찾음: $1"
+else
+  { echo "=== $FILE ==="; cat "$FILE"; } | clip.exe
+  echo "✅ $FILE → 클립보드 ($(wc -l < "$FILE")줄)"
+fi

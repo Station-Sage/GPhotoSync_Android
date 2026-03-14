@@ -1,0 +1,5 @@
+#!/bin/bash
+cd ~/GphotoSync
+git diff --stat
+git diff | clip.exe
+echo "✅ diff → 클립보드"
