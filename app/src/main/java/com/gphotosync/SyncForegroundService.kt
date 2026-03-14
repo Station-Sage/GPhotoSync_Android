@@ -221,17 +221,13 @@ class SyncForegroundService : Service() {
             // 폴더 캐시로 불필요한 ensureFolder 호출 방지
             val folderCached = synchronized(createdFolders) { folderPath in createdFolders }
             val folderOk = if (folderCached) true else {
-                val result = suspendCancellableCoroutine<Boolean> { cont ->
-                    oneDriveApi.ensureFolder(folderPath) { cont.resume(it) }
-                }
+                val result = oneDriveApi.ensureFolder(folderPath)
                 if (result) synchronized(createdFolders) { createdFolders.add(folderPath) }
                 result
             }
 
             if (folderOk) {
-                val driveId = suspendCancellableCoroutine<String?> { cont ->
-                    oneDriveApi.uploadFile(safeData, item.filename, folderPath) { cont.resume(it) }
-                }
+                val driveId = oneDriveApi.uploadFile(safeData, item.filename, folderPath)
                 uploadOk = driveId != null
             }
 
@@ -300,17 +296,13 @@ class SyncForegroundService : Service() {
 
             val folderCached = synchronized(createdFolders) { folderPath in createdFolders }
             val folderOk = if (folderCached) true else {
-                val result = suspendCancellableCoroutine<Boolean> { cont ->
-                    oneDriveApi.ensureFolder(folderPath) { cont.resume(it) }
-                }
+                val result = oneDriveApi.ensureFolder(folderPath)
                 if (result) synchronized(createdFolders) { createdFolders.add(folderPath) }
                 result
             }
 
             if (folderOk) {
-                val driveId = suspendCancellableCoroutine<String?> { cont ->
-                    oneDriveApi.uploadFile(fileData, record.filename, folderPath) { cont.resume(it) }
-                }
+                val driveId = oneDriveApi.uploadFile(fileData, item.filename, folderPath)
                 uploadOk = driveId != null
             }
 

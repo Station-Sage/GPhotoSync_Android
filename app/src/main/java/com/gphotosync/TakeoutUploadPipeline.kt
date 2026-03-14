@@ -98,9 +98,7 @@ internal fun TakeoutUploadService.startUpload(
             liveLog("✅ 루트 폴더 준비 완료: ${api.rootFolder}")
 
             try {
-                val children = suspendCoroutine<List<Triple<String, String, Boolean>>> { cont ->
-                    api.listChildren(api.rootFolder) { cont.resume(it ?: emptyList()) }
-                }
+                val children = listChildrenSuspend(api, api.rootFolder)
                 val yearFolders = children.filter { it.third }.map { it.second }
                 synchronized(createdFolders) {
                     yearFolders.forEach { name -> createdFolders.add("${api.rootFolder}/$name") }

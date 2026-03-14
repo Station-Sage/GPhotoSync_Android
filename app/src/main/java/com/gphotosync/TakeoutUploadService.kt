@@ -8,10 +8,6 @@ import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.*
-import kotlin.coroutines.suspendCoroutine
-import kotlin.coroutines.resume
-
-
 class TakeoutUploadService : Service() {
 
     companion object {
@@ -53,7 +49,7 @@ class TakeoutUploadService : Service() {
     // === OkHttp 콜백 → suspend 변환 ===
     internal suspend fun ensureFolderSuspend(api: OneDriveApi, path: String): Boolean {
         for (attempt in 1..3) {
-            val ok = suspendCoroutine<Boolean> { cont -> api.ensureFolder(path) { cont.resume(it) } }
+            val ok = api.ensureFolder(path)
             if (ok) return true
             if (attempt < 3) {
                 liveLog("⚠ 폴더 생성 재시도 $attempt/3: $path")
@@ -65,31 +61,31 @@ class TakeoutUploadService : Service() {
     }
 
     internal suspend fun uploadFileSuspend(api: OneDriveApi, data: ByteArray, fn: String, fp: String): String? =
-        suspendCoroutine { cont -> api.uploadFile(data, fn, fp) { cont.resume(it) } }
+        api.uploadFile(data, fn, fp)
 
     internal suspend fun uploadFileFromFileSuspend(api: OneDriveApi, file: java.io.File, fn: String, fp: String): String? =
-        suspendCoroutine { cont -> api.uploadFileFromFile(file, fn, fp) { cont.resume(it) } }
+        api.uploadFileFromFile(file, fn, fp)
 
     internal suspend fun getItemIdSuspend(api: OneDriveApi, path: String): String? =
-        suspendCoroutine { cont -> api.getItemId(path) { cont.resume(it) } }
+        api.getItemId(path)
 
     internal suspend fun createAlbumSuspend(api: OneDriveApi, name: String, ids: List<String>): Boolean =
-        suspendCoroutine { cont -> api.createAlbum(name, ids) { cont.resume(it) } }
+        api.createAlbum(name, ids)
 
     internal suspend fun moveFileSuspend(api: OneDriveApi, itemId: String, destFolderId: String): Boolean =
-        suspendCoroutine { cont -> api.moveFile(itemId, destFolderId) { cont.resume(it) } }
+        api.moveFile(itemId, destFolderId)
 
-    internal suspend fun listChildrenSuspend(api: OneDriveApi, folderId: String): List<Triple<String, String, Boolean>>? =
-        suspendCoroutine { cont -> api.listChildren(folderId) { cont.resume(it) } }
+    internal suspend fun listChildrenSuspend(api: OneDriveApi, folderId: String): List<Triple<String, String, Boolean>> =
+        api.listChildren(folderId)
 
     internal suspend fun deleteItemSuspend(api: OneDriveApi, itemId: String): Boolean =
-        suspendCoroutine { cont -> api.deleteItem(itemId) { cont.resume(it) } }
+        api.deleteItem(itemId)
 
     internal suspend fun getFolderIdSuspend(api: OneDriveApi, path: String): String? =
-        suspendCoroutine { cont -> api.getFolderId(path) { cont.resume(it) } }
+        api.getFolderId(path)
 
     internal suspend fun checkFileExistsSuspend(api: OneDriveApi, path: String): Long? =
-        suspendCoroutine { cont -> api.checkFileExists(path) { cont.resume(it) } }
+        api.checkFileExists(path)
 
     override fun onBind(intent: Intent?): IBinder? = null
     override fun onCreate() { super.onCreate(); createNotificationChannel() }
