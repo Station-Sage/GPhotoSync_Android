@@ -1,0 +1,10 @@
+#!/bin/bash
+cd ~/GphotoSync
+echo "=== AGENTS.md ==="
+cat AGENTS.md
+echo -e "\n=== .ai/index.md ==="
+cat .ai/index.md
+echo -e "\n=== BUGS.md ==="
+cat BUGS.md
+echo -e "\n=== .ai/todo.md ==="
+cat .ai/todo.md

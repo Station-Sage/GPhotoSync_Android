@@ -28,6 +28,7 @@
 - ai-build-local: pull + 로컬빌드 + APK 복사
 - ai-build-remote "메시지": push + GitHub빌드 + APK 다운로드
 - ai-status: 현재 작업 확인
+- ai-context: 세션 컨텍스트 출력 (ai-context | ai-copy → AI챗에 붙여넣기)
 - setup-termux.sh: ~/bin에 심볼릭 링크 생성 (초기 설정)
 
 ## 빌드 명령 (공통)
