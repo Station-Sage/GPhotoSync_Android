@@ -1,4 +1,4 @@
-# CLAUDE.md — Claude Code 컨텍스트
+# AGENTS.md — AI Agent 컨텍스트
 
 ## 프로젝트
 GPhotoSync — Google Takeout ZIP → OneDrive 업로드 Android 앱 (Kotlin)
@@ -24,7 +24,7 @@ GPhotoSync — Google Takeout ZIP → OneDrive 업로드 Android 앱 (Kotlin)
 - 세션 시작 시: `.ai/index.md` → `BUGS.md` + `.ai/todo.md` 순서로 읽기
 - 코드 수정 전: `.ai/files.md`에서 파일 역할 확인
 - 설계 판단 시: `.ai/decisions.md` 참조
-- 상세 문서: `.ai/` 폴더 내 필요한 파일만 선택적 로드
+- Termux + AI챗 환경: `.ai/env-termux-chat.md` 필독
 
 ## 핵심 규칙
 - 1파일 300줄 이하, 초과 시 분할
